@@ -1,0 +1,79 @@
+name: tests
+
+# Everything here runs without an ECU, without a dump and without a serial port -- which is
+# the whole reason the fake ECU exists.  A project that asks people to point it at hardware
+# they cannot easily replace should be able to show that its checks pass on every push.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  engine:
+    # The protocol and the write path, against the simulated ECU.  No display needed.
+    name: engine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # macOS runners resolve `uv sync` to a Homebrew python that is built WITHOUT Tk --
+      # `import tkinter` dies on `No module named '_tkinter'` -- and there is no apt-style
+      # package to add it to that interpreter.  A uv-managed CPython carries its own Tk 8.6
+      # and works.  macOS ONLY: on Linux the uv-managed build brings Tk 9.0, which cannot
+      # see the system fonts, and the reasoning for that is at the bottom of pyproject.toml.
+      - name: macOS needs an interpreter that has Tk at all
+        if: runner.os == 'macOS'
+        run: |
+          uv python install 3.12
+          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
+      - run: uv sync
+      - name: blob vs assembler, patch sites, gate, framing
+        run: uv run python tests/test_monitor_offline.py
+      - name: end-to-end against a simulated ECU
+        run: uv run python tests/test_monitor_fakeecu.py
+      # The bilingual docs are only survivable while something checks that the two halves
+      # still agree on every number.  Needs no display, so it rides with the engine job.
+      - name: English and Russian docs agree on every number
+        run: uv run python tools/check_docs_parity.py
+
+  gui:
+    # The GUI's platform assumptions: modifier bits, font metrics against the pixel layout,
+    # both colour palettes, and the scroll events this platform actually sends.  These differ
+    # per platform by definition, so running them on one OS would prove the least useful
+    # third of the thing.  Linux needs a virtual display; the other two have one.
+    name: gui (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # macOS runners resolve `uv sync` to a Homebrew python that is built WITHOUT Tk --
+      # `import tkinter` dies on `No module named '_tkinter'` -- and there is no apt-style
+      # package to add it to that interpreter.  A uv-managed CPython carries its own Tk 8.6
+      # and works.  macOS ONLY: on Linux the uv-managed build brings Tk 9.0, which cannot
+      # see the system fonts, and the reasoning for that is at the bottom of pyproject.toml.
+      - name: macOS needs an interpreter that has Tk at all
+        if: runner.os == 'macOS'
+        run: |
+          uv python install 3.12
+          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
+      - run: uv sync
+      # python3-tk is not optional here and is not a Python dependency: `uv sync` resolves
+      # to the distribution's own python3, and Debian and Ubuntu ship tkinter as a separate
+      # package, so without it every check in this job fails at `import tkinter`.
+      - name: platform checks (Linux, under a virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk
+          xvfb-run -a uv run python tools/check_gui_platform.py
+      - name: platform checks
+        if: runner.os != 'Linux'
+        run: uv run python tools/check_gui_platform.py
