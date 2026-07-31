@@ -1,0 +1,18 @@
+# Line endings are LF, in the repository and in the working tree, on every platform.
+#
+# This is not housekeeping.  The bench moves between a Mac and a Windows PC by copying the
+# working tree across, and on one such trip Windows rewrote three files as CRLF.  A change
+# of 565 lines in klinebsl.py then arrived looking like a 5446-line rewrite of a 2500-line
+# file, which hides the review in the noise — and reviewing what came back is the only
+# thing standing between someone else's session and this ECU.
+* text=auto eol=lf
+
+# Never let any of that machinery near a binary.  The photographs carry redactions and the
+# stage blobs are checked byte-for-byte against the assembler's output; a helpful newline
+# conversion in either would be silent and would not be caught by reading a diff.
+*.png binary
+*.jpg binary
+*.bin binary
+*.ico binary
+*.icns binary
+*.zip binary

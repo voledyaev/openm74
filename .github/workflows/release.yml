@@ -1,0 +1,114 @@
+name: release
+
+# Builds the downloads on GitHub's own machines and attaches them to a Release.
+#
+# This exists because PyInstaller does NOT cross-compile: it bundles the interpreter and
+# libraries of the machine it runs on, so a Windows .exe can only be produced on Windows and
+# a macOS .app only on macOS. Building by hand therefore means owning every platform you ship
+# to and remembering to redo all of them on every change -- which is exactly how this project
+# ended up with an .exe several commits older than its own sources, carrying bugs that had
+# already been fixed. A tag is a better trigger than a memory.
+#
+# Not signed and not notarised on any platform. Signing costs money this project does not
+# spend, and the README says so next to the download rather than leaving people to discover
+# it from a scary dialog.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:          # so a build can be produced without cutting a tag
+
+permissions:
+  contents: write             # needed to create the Release and upload to it
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false        # one platform failing must not hide the others' results
+      matrix:
+        # The OLDEST supported runner for Linux, deliberately: PyInstaller does not link
+        # glibc statically, so a binary built on 24.04 refuses to start on anything older
+        # with "GLIBC_2.39 not found".  Building on the old one runs everywhere newer; the
+        # reverse is not true.
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # macOS runners resolve `uv sync` to a Homebrew python that is built WITHOUT Tk --
+      # `import tkinter` dies on `No module named '_tkinter'` -- and there is no apt-style
+      # package to add it to that interpreter.  A uv-managed CPython carries its own Tk 8.6
+      # and works.  macOS ONLY: on Linux the uv-managed build brings Tk 9.0, which cannot
+      # see the system fonts, and the reasoning for that is at the bottom of pyproject.toml.
+      - name: macOS needs an interpreter that has Tk at all
+        if: runner.os == 'macOS'
+        run: |
+          uv python install 3.12
+          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
+      - run: uv sync
+
+      # The same checks that guard a push guard a release. A build that ships is a worse
+      # place to find out the stages did not travel than a build that does not.
+      - name: tests
+        run: |
+          uv run python tests/test_monitor_offline.py
+          uv run python tests/test_monitor_fakeecu.py
+
+      # Three system packages, none of them a Python dependency and so none of them in
+      # uv.lock.  MEASURED, in an ubuntu-22.04 container: `uv sync` resolves to the
+      # DISTRIBUTION's python3 rather than downloading a managed one, and Debian and Ubuntu
+      # split that interpreter across packages -- tkinter lives in python3-tk, and the
+      # shared libpython PyInstaller needs to bundle lives in libpython3-dev.  Without them
+      # this job fails on the tag that was supposed to produce the Linux download, which is
+      # the worst possible moment to find out.  xvfb is for the self-test's Tk check.
+      - name: build (Linux needs a display and the parts Ubuntu ships separately)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk libpython3-dev
+          xvfb-run -a uv run python tools/build_exe.py
+      - name: build
+        if: runner.os != 'Linux'
+        run: uv run python tools/build_exe.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openm74-${{ runner.os }}
+          # the .app itself is a directory; the build script zips it and hashes the zip
+          path: |
+            dist/openm74.exe
+            dist/openm74.exe.sha256
+            dist/openm74-macos-*.zip
+            dist/openm74-macos-*.zip.sha256
+            dist/openm74
+            dist/openm74.sha256
+          if-no-files-found: ignore
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: collect the hashes into one list
+        run: |
+          find artifacts -name '*.sha256' -exec cat {} \; | sort > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/openm74.exe
+            artifacts/**/openm74-macos-*.zip
+            artifacts/**/openm74
+            SHA256SUMS.txt
+          body: |
+            Unsigned builds, as always — see the README for what each platform will say
+            about that and how to get past it.
+
+            macOS: Apple Silicon, macOS 11+. First launch needs right-click → Open.
+            Windows: SmartScreen will call it an unknown publisher.
+
+            `SHA256SUMS.txt` lists the hash of every file here.
