@@ -1,0 +1,57 @@
+# Firmware images never belong in this repository.
+# A dump is one specific vehicle's calibration and adaptation data: not ours to publish,
+# and useless to anybody else.  The tests build their own synthetic image instead.
+#
+# The last two rules are REDUNDANT with *.bin and stay anyway.  Everything this tool writes
+# is a .bin, so the pattern already covers them -- but the negations that re-admit the stage
+# blobs are exactly the kind of line a later edit widens, and a vehicle dump reaching a
+# public repository is the one mistake here with no undo.
+*.bin
+!stages/*.bin
+!src/openm74/stages/*.bin
+m74_backup_*
+m74_selftest_*
+# A .part file is HALF a dump, which is worse rather than better: --oneshot keeps a short
+# read as <out>.part and --stitch writes through one, so a cancelled read leaves real
+# vehicle flash in the working directory under a name *.bin does not match.
+*.part
+
+# The GUI keeps its log beside itself, which is this directory when it runs from a checkout.
+openm74_log.txt
+
+# Build products, including the finished ones.  The downloads live in GitHub Releases, not
+# in the tree: a binary committed here is ~10 MB added to history FOREVER on every rebuild,
+# for a file that goes stale the moment the source moves -- and a stale binary next to fresh
+# sources is worse than no binary, because whoever downloads it gets bugs that were fixed.
+#
+# The .sha256 files go with them, for the same reason one step removed: a hash identifies one
+# specific build, PyInstaller builds are not reproducible, so a hash sitting in the tree
+# always describes some historical binary rather than the source next to it.  It belongs in
+# the release notes, beside the file it actually identifies.  PyInstaller's .spec is written
+# into build/ (tools/build_exe.py passes --specpath), so it needs no rule of its own, and
+# Python 3 keeps every .pyc inside __pycache__.
+build/
+dist/
+__pycache__/
+
+# uv, virtualenv, linter cache.  uv.lock IS committed: it is what makes a checkout
+# reproducible.
+.venv/
+.ruff_cache/
+
+# OS and editor litter
+.DS_Store
+Thumbs.db
+# AppleDouble sidecars.  macOS writes one per file when a tree crosses a filesystem that
+# cannot hold its metadata -- a USB stick, a network share, a copy to another machine.  They
+# are invisible in Finder, so they get committed by an unsuspecting `git add -A` and then
+# show up as noise in every diff on every other platform.
+._*
+
+# Assembler intermediates, plus the diagnostic stubs: their bytes live in klinebsl.py
+# and tools/build_stages.py checks the assembled output against THOSE, which is what the
+# tool actually uploads.  A committed .bin here would be a third copy with nothing to keep
+# it honest.  (diag-*.bin needs its own line because !stages/*.bin above re-admits them.)
+*.p
+*.lst
+stages/diag-*.bin

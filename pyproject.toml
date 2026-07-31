@@ -1,0 +1,115 @@
+[project]
+name = "openm74"
+version = "1.0.0"
+description = "Read and write the internal flash of an Itelma M74 CAN ECU (Infineon XC2765X) over K-line"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+keywords = ["m74", "ecu", "flash", "k-line", "bsl", "xc2765x", "c166", "automotive"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Embedded Systems",
+]
+
+# One runtime dependency, on purpose.  This is shipped to people who are right to be
+# wary of downloaded binaries, and a short dependency list is what makes "read it
+# yourself, build it yourself" a realistic answer rather than a slogan.
+dependencies = ["pyserial>=3.5"]
+
+[project.urls]
+Homepage = "https://github.com/voledyaev/openm74"
+Documentation = "https://github.com/voledyaev/openm74/tree/main/docs"
+
+[project.scripts]
+openm74 = "openm74.klinebsl:main"
+
+[project.gui-scripts]
+openm74-gui = "openm74.gui:main"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openm74"]
+
+[tool.hatch.build.targets.wheel.force-include]
+# The assembled stages travel with the package so the bytes the tool is about to push
+# into an ECU can be checked against the assembler's own output without a toolchain.
+"src/openm74/stages" = "openm74/stages"
+
+# NO [tool.uv] python-preference, and no .python-version, deliberately -- because the
+# obvious tidy-up here does not work and the measurement is worth more than the tidiness.
+#
+# tkinter and libpython cannot be expressed as dependencies: the first is a standard-library
+# module built against Tcl/Tk, the second is part of the interpreter itself.  Debian and
+# Ubuntu package both separately (python3-tk, libpython3-dev), and `uv sync` there resolves
+# to the DISTRIBUTION's python3 rather than downloading one -- measured, uv 0.12 on Ubuntu
+# 22.04.  So the natural fix is to make uv use its own interpreter instead, and be done with
+# system packages entirely.
+#
+# MEASURED, in that same container, and it is worse: a uv-managed CPython 3.12 carries
+# **Tk 9.0**, whose bundled Tcl/Tk does not see the system's fonts.  TkDefaultFont falls back
+# to the X core "Helvetica" and "courier" -- bitmap faces, no em dash, no ellipsis, bitmap
+# Cyrillic -- tools/check_gui_platform.py fails on the font metrics, and the PyInstaller
+# binary built against it exits 1 on startup.  The distribution's python3-tk is Tk 8.6, is
+# wired to fontconfig, and produces a bundle that runs and renders correctly.
+#
+# So: distribution Python on Linux, the two apt packages named in the README and in the CI
+# workflows, and tools/build_exe.py answers the one failure with the package that fixes it.
+
+# ---------------------------------------------------------------------------
+# Lint configuration.  ruff is not a dependency of anything -- run it with
+# `uv run --with ruff ruff check .` -- but the settings live here so "what this
+# project holds itself to" is written down rather than argued about.
+#
+# There is deliberately NO formatter.  The comments in this codebase carry
+# measurements, retractions and the reasoning behind decisions, and they are laid
+# out by hand to be read; a reflow would rewrite every file at once and produce a
+# diff nobody can review, which for code that gets uploaded into an engine
+# controller is a bad trade for consistent whitespace.
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Correctness rules, not style opinions -- plus E501 alone out of pycodestyle, because a
+# line-length that nothing enforces is a preference pretending to be a rule.  E402 is
+# selected for the same reason: the per-file-ignores below were dead without it.
+select = ["F", "B", "C4", "SIM", "RUF", "E402", "E501"]
+ignore = [
+    # The interface catalogue is Russian and English, and the prose uses em dashes
+    # and typographic quotes on purpose.  This rule flags every one of them.
+    "RUF001", "RUF002", "RUF003",
+    # `open(p).read()` on a file this program just wrote, in a build tool that exits
+    # immediately afterwards, is not a leak worth a context manager and four lines.
+    "SIM115",
+    # Suppressing an exception with try/except/pass is used where the alternative is
+    # an application that will not open because it could not read a preference.  The
+    # comment above each one says which.
+    "SIM105",
+    # Class-level dicts used as constants.  Marking them ClassVar would be the only
+    # typing annotation in the project.
+    "RUF012",
+    # dict(a=1, b=2) -> {"a": 1, "b": 2}.  Tried, reverted: the two colour palettes and
+    # the Tk option dictionaries are keyword tables, and quoting every key turned two
+    # readable blocks into forty lines of punctuation for no behavioural change.
+    "C408",
+    # list(a) + [b] -> [*list(a), b].  Same call: the concatenation says what it does.
+    "RUF005",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The bench probes and build tools put the package on sys.path before importing it,
+# which is the entire reason those imports are where they are.
+"tools/*.py" = ["E402"]
+"tests/*.py" = ["E402"]
