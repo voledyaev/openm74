@@ -1841,8 +1841,25 @@ def compare_report(data, label="dump"):
     compared byte matched -- and False when a reference was read and bytes differed.  The
     return value is what --verify hands the shell, so a script can use it as a gate."""
     import hashlib
+
+    from . import checksum
     print("[kline] %s: %d bytes  sha256=%s" % (label, len(data),
           hashlib.sha256(data).hexdigest().upper()))
+    # ROM checksum self-consistency.  A dump read off a block, or a file about to be
+    # written, that does not add up to its own stored checksum is the thing that puts
+    # P0601 up three minutes after start -- so say it, for every file this looks at.
+    # This is a statement about the image, not a gate: a mismatch may be deliberate
+    # (a tuner's unfinished file) and is not this tool's to refuse.
+    ck, field, detail = checksum.status(data)
+    if ck is True:
+        print("[kline]   ROM checksum: OK (field 0x%05X, %s)" % (field, detail))
+    elif ck is False:
+        print("[kline]   ROM checksum: MISMATCH at field 0x%05X -- %s" % (field, detail))
+        print("[kline]      this image would raise P0601 after ~3 min; recompute its "
+              "ROM checksum in your calibration editor before writing it")
+    else:
+        print("[kline]   ROM checksum: not checked -- %s" % detail)
+    event("rom-checksum", ok=ck, field=field, detail=detail, label=label)
     agreed = True
     for name, path in (("reference dump", REF_BIN),):
         if not path:
@@ -1886,6 +1903,30 @@ def compare_report(data, label="dump"):
             print("[kline]      first differing offsets: %s"
                   % ", ".join("0x%06X" % (0xC00000 + o) for o in diff[:6]))
     return agreed
+
+
+def warn_rom_checksum(img, path):
+    """Before a write: say whether the full image's ROM checksum is self-consistent.
+
+    A warning, never a refusal.  openm74 writes exactly the bytes it is given -- it
+    does not quietly recompute somebody's checksum -- so a mismatch is surfaced and
+    left to the person.  A mismatch means this image will raise P0601 after ~3 min;
+    a match means it will not.  Nothing here erases or blocks anything."""
+    from . import checksum
+    ck, field, detail = checksum.status(img)
+    if ck is True:
+        print("[kline] ROM checksum of %s: OK (field 0x%05X)"
+              % (os.path.basename(path), field))
+    elif ck is False:
+        print("[kline] ROM checksum of %s: MISMATCH (field 0x%05X, %s)"
+              % (os.path.basename(path), field, detail))
+        print("[kline]   this image will raise P0601 after ~3 min of running. That may be")
+        print("[kline]   intended; if not, recompute its ROM checksum in your calibration")
+        print("[kline]   editor first. Writing anyway -- openm74 writes the bytes it is given.")
+    else:
+        print("[kline] ROM checksum of %s: not checked (%s)"
+              % (os.path.basename(path), detail))
+    event("rom-checksum", ok=ck, field=field, detail=detail, path=os.path.basename(path))
 
 
 FLASH_BASE = 0xC00000
@@ -3667,6 +3708,7 @@ def _main():
                 if len(img) != FLASH_SIZE:
                     sys.exit("[kline] --flash wants a full %d-byte image; %s is %d bytes"
                              % (FLASH_SIZE, args.flash, len(img)))
+                warn_rom_checksum(img, args.flash)
                 # --flash is the WHOLE image at the ONE address it can go.  Silently
                 # overriding a typed --addr/--len/--image would erase 206 sectors for
                 # someone who asked for one -- the same silent cap that --write was just
@@ -3691,6 +3733,13 @@ def _main():
                 if args.addr is None:
                     sys.exit("[kline] --write needs --addr")
                 blobf = open(args.write, "rb").read()
+                # Only a whole image carries the ROM checksum; a fragment does not,
+                # so a partial write is reported as not-checked rather than guessed at.
+                if len(blobf) == FLASH_SIZE:
+                    warn_rom_checksum(blobf, args.write)
+                else:
+                    print("[kline] ROM checksum: partial write, not checked "
+                          "(the checksum covers the whole image)")
                 if args.image:
                     off = args.addr - FLASH_BASE
                     if off < 0 or off >= len(blobf):

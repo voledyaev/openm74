@@ -35,6 +35,8 @@ jobs:
         run: uv run python tests/test_monitor_offline.py
       - name: end-to-end against a simulated ECU
         run: uv run python tests/test_monitor_fakeecu.py
+      - name: ROM checksum math (field-independent, reserved sector)
+        run: uv run python tests/test_checksum.py
       # The bilingual docs are only survivable while something checks that the two halves
       # still agree on every number.  Needs no display, so it rides with the engine job.
       - name: English and Russian docs agree on every number
