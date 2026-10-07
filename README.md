@@ -14,6 +14,10 @@ over K-line, on the bench. Cross-platform, no vendor DLLs, no dongle, MIT licens
 * **Reads** the full 832 KB image in a single pass to a `.bin` file
 * **Writes** a full `.bin` image back, verifying every sector as it goes
 * Treats the image as opaque bytes — it does not parse, interpret or edit calibrations
+* **Reports the ROM checksum** of any image: on read, so a dump that is not
+  self-consistent is visible; before a write, so an image that would raise `P0601`
+  is flagged. It warns, it does not block or recompute — openm74 writes the bytes it
+  is given
 
 Both directions have been proven byte-exact on hardware: an image written by this tool
 and then read back by a *different* mechanism matched the source file 851968/851968.
@@ -267,6 +271,29 @@ silicon does not — programming-enable and K-line land on different connector p
 [docs/HARDWARE.md](docs/HARDWARE.md) describes only the M74 CAN. And a successful handshake
 proves nothing: `0xD5` is answered by every modern C166-family part including ST10, which
 loads code to a completely different address.
+
+## ROM checksum
+
+The ECU keeps a 16-bit checksum of its own ROM and raises `P0601` about three
+minutes after start if the image does not add up to it. The dealer and loader tools
+do not recompute it, so an edited image flashed by them trips the code — a nuisance
+that hides real faults behind it.
+
+openm74 does not edit images, so it never needs to recompute the checksum. What it
+does is *report* it: `--verify FILE` and every dump print whether the image is
+self-consistent, and a full-image write prints the same before erasing anything. A
+mismatch is a warning, not a refusal — it may be an unfinished file, and recomputing
+it is the calibration editor's job, not the flasher's.
+
+The algorithm is read out of each image's own machine code rather than from a table,
+because the summed range, the checksum field's position and whether the reserved
+sector `0x0F000` is included all vary between software versions. Measured against 120
+factory images, the routine is found in 119 (absent only in the pre-production
+`I414DA01`) and the computed value equals AvtoVAZ's own published checksum in 105 of
+the 107 the table lists — the two misses are single-digit typos in the table. A dump
+read off a block is reported correctly as-is: on all but the two earliest versions
+the reserved sector is outside the sum, and where it is inside, it is summed as the
+`9b 1e` the silicon returns.
 
 ## Status and limitations
 
