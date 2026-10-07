@@ -34,18 +34,19 @@ jobs:
         # reverse is not true.
         os: [windows-latest, macos-latest, ubuntu-22.04]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       # macOS runners resolve `uv sync` to a Homebrew python that is built WITHOUT Tk --
       # `import tkinter` dies on `No module named '_tkinter'` -- and there is no apt-style
-      # package to add it to that interpreter.  A uv-managed CPython carries its own Tk 8.6
-      # and works.  macOS ONLY: on Linux the uv-managed build brings Tk 9.0, which cannot
-      # see the system fonts, and the reasoning for that is at the bottom of pyproject.toml.
+      # package to add it to that interpreter.  A uv-managed CPython carries its own Tk (9.0
+      # as of 3.14.8) and works: MEASURED, tools/check_gui_platform.py passes on it on macOS.
+      # macOS ONLY: on Linux the same Tk 9.0 cannot see the system fonts, and the reasoning
+      # for that is at the bottom of pyproject.toml.
       - name: macOS needs an interpreter that has Tk at all
         if: runner.os == 'macOS'
         run: |
-          uv python install 3.12
-          echo "UV_PYTHON=3.12" >> "$GITHUB_ENV"
+          uv python install 3.14
+          echo "UV_PYTHON=3.14" >> "$GITHUB_ENV"
       - run: uv sync
 
       # The same checks that guard a push guard a release. A build that ships is a worse
@@ -72,7 +73,7 @@ jobs:
         if: runner.os != 'Linux'
         run: uv run python tools/build_exe.py
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: openm74-${{ runner.os }}
           # the .app itself is a directory; the build script zips it and hashes the zip
@@ -90,14 +91,14 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: collect the hashes into one list
         run: |
           find artifacts -name '*.sha256' -exec cat {} \; | sort > SHA256SUMS.txt
           cat SHA256SUMS.txt
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             artifacts/**/openm74.exe

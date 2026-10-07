@@ -61,7 +61,7 @@ _RE_STORE = re.compile(rb"\xd7\x40(..)\xf6\xf4(..)", re.S)
 class Params:
     """Summed pages (page, limit) and the file offset of the 4-byte field."""
 
-    __slots__ = ("routine", "field")
+    __slots__ = ("field", "routine")
 
     def __init__(self, routine, field):
         self.routine = routine
