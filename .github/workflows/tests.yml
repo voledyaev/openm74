@@ -19,7 +19,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       # macOS runners resolve `uv sync` to a Homebrew python that is built WITHOUT Tk --
       # `import tkinter` dies on `No module named '_tkinter'` -- and there is no apt-style
       # package to add it to that interpreter.  A uv-managed CPython carries its own Tk (9.0
@@ -56,7 +56,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.2.0
       # macOS runners resolve `uv sync` to a Homebrew python that is built WITHOUT Tk --
       # `import tkinter` dies on `No module named '_tkinter'` -- and there is no apt-style
       # package to add it to that interpreter.  A uv-managed CPython carries its own Tk (9.0
