@@ -33,7 +33,7 @@ openm74-gui = "openm74.gui:main"
 
 [dependency-groups]
 dev = [
-    "pyinstaller>=6.0",
+    "pyinstaller>=6.22",
 ]
 
 [build-system]
