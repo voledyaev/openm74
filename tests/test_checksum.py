@@ -7,7 +7,17 @@ the flasher relies on: the sum is independent of what the field holds, a correct
 field verifies, a wrong one does not, and a non-M74 buffer is reported as
 not-an-M74-image rather than guessed at.
 """
+import sys
+
 from openm74 import checksum as C
+
+# Section [8] prints the GUI's Russian strings, and a Windows CI console is cp1252, which
+# cannot encode Cyrillic -- the same trap tools/check_gui_platform.py fell into first.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 fails = []
 
