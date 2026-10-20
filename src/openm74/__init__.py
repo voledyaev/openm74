@@ -5,6 +5,6 @@ drives it by building the same command line a person would type.  Nothing is dup
 between them, so the button and the terminal cannot drift apart.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 __all__ = ["gui", "klinebsl"]

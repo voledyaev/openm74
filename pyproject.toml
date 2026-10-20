@@ -1,6 +1,6 @@
 [project]
 name = "openm74"
-version = "1.0.0"
+version = "1.0.1"
 description = "Read and write the internal flash of an Itelma M74 CAN ECU (Infineon XC2765X) over K-line"
 readme = "README.md"
 license = { file = "LICENSE" }
