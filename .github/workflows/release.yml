@@ -55,6 +55,7 @@ jobs:
         run: |
           uv run python tests/test_monitor_offline.py
           uv run python tests/test_monitor_fakeecu.py
+          uv run python tests/test_checksum.py
 
       # Three system packages, none of them a Python dependency and so none of them in
       # uv.lock.  MEASURED, in an ubuntu-22.04 container: `uv sync` resolves to the

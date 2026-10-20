@@ -413,6 +413,13 @@ check("a pre-flight backup was taken before erasing", len(backups) >= 1)
 check("the backup is the ECU as it was, in full",
       bool(backups) and open(os.path.join(TMP, backups[0]), "rb").read() == REF)
 check("the final read-back verify ran", "FINAL VERIFY PASSED" in out)
+# A fragment's own bytes say nothing about the ECU's ROM checksum; the image that does is
+# the backup with the fragment laid over it, so that is the one checked -- after the backup.
+check("a partial write defers the ROM checksum to the backup",
+      "partial write -- checked after the pre-flight backup" in out)
+check("and the ECU's resulting image is the one checked",
+      "ROM checksum of the ECU after this write" in out
+      and out.index("ROM checksum of the ECU") > out.index("pre-flight backup: reading"))
 off = 0xCC5040 - K.FLASH_BASE
 check("the requested bytes landed", bytes(ecu.flash[off:off + 300]) == newbytes)
 check("bytes before the range preserved",

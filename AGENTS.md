@@ -56,6 +56,8 @@ and reconstructing five.
 ```
 uv run python tests/test_monitor_offline.py     # blob vs assembler, patch sites, gate, framing
 uv run python tests/test_monitor_fakeecu.py     # end-to-end against a simulated ECU
+uv run python tests/test_checksum.py            # ROM checksum arithmetic, reserved sector
+uv run python tools/check_checksum_corpus.py    # checksum + P0601 mask on 120 factory images; skips cleanly without them
 uv run python tools/check_gui_platform.py       # this platform's GUI assumptions
 uv run python tools/build_stages.py             # needs a C166 assembler; skips cleanly without
 uv run python tools/check_docs_parity.py       # English vs Russian docs: numbers, addresses, links

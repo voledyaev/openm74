@@ -1845,21 +1845,10 @@ def compare_report(data, label="dump"):
     from . import checksum
     print("[kline] %s: %d bytes  sha256=%s" % (label, len(data),
           hashlib.sha256(data).hexdigest().upper()))
-    # ROM checksum self-consistency.  A dump read off a block, or a file about to be
-    # written, that does not add up to its own stored checksum is the thing that puts
-    # P0601 up three minutes after start -- so say it, for every file this looks at.
-    # This is a statement about the image, not a gate: a mismatch may be deliberate
-    # (a tuner's unfinished file) and is not this tool's to refuse.
-    ck, field, detail = checksum.status(data)
-    if ck is True:
-        print("[kline]   ROM checksum: OK (field 0x%05X, %s)" % (field, detail))
-    elif ck is False:
-        print("[kline]   ROM checksum: MISMATCH at field 0x%05X -- %s" % (field, detail))
-        print("[kline]      this image would raise P0601 after ~3 min; recompute its "
-              "ROM checksum in your calibration editor before writing it")
-    else:
-        print("[kline]   ROM checksum: not checked -- %s" % detail)
-    event("rom-checksum", ok=ck, field=field, detail=detail, label=label)
+    # ROM checksum self-consistency, for every file this looks at.  A statement about
+    # the image, not a gate: a mismatch may be deliberate (a tuner's unfinished file)
+    # and is not this tool's to refuse.
+    rom_checksum_report(data, label)
     agreed = True
     for name, path in (("reference dump", REF_BIN),):
         if not path:
@@ -1905,28 +1894,71 @@ def compare_report(data, label="dump"):
     return agreed
 
 
-def warn_rom_checksum(img, path):
-    """Before a write: say whether the full image's ROM checksum is self-consistent.
+def rom_checksum_report(img, label, what="image", result=False):
+    """Say whether a full image's ROM checksum is self-consistent, and what that means.
 
-    A warning, never a refusal.  openm74 writes exactly the bytes it is given -- it
-    does not quietly recompute somebody's checksum -- so a mismatch is surfaced and
-    left to the person.  A mismatch means this image will raise P0601 after ~3 min;
-    a match means it will not.  Nothing here erases or blocks anything."""
+    A warning, never a refusal: openm74 writes exactly the bytes it is given and does not
+    quietly recompute somebody's checksum.  What a mismatch MEANS depends on the image's
+    own monitor mask, so that is read too -- MEASURED on 119 factory images, 11 ship with
+    a stale field and P0601 masked off, and calling those "will raise P0601" would be a
+    confident false statement about a genuine factory file.  Returns the verdict."""
     from . import checksum
-    ck, field, detail = checksum.status(img)
-    if ck is True:
-        print("[kline] ROM checksum of %s: OK (field 0x%05X)"
-              % (os.path.basename(path), field))
-    elif ck is False:
-        print("[kline] ROM checksum of %s: MISMATCH (field 0x%05X, %s)"
-              % (os.path.basename(path), field, detail))
-        print("[kline]   this image will raise P0601 after ~3 min of running. That may be")
-        print("[kline]   intended; if not, recompute its ROM checksum in your calibration")
-        print("[kline]   editor first. Writing anyway -- openm74 writes the bytes it is given.")
+    ok, field, detail, p0601 = checksum.status(img)
+    name = os.path.basename(label)
+    # `result`: the image is the ECU's own with this write laid over it, not a file -- so a
+    # front end names it in its own language instead of quoting this English label.
+    fields = dict(field=field, p0601=p0601, label=name, result=result)
+    if ok is True:
+        print("[kline] ROM checksum of %s %s: OK (field 0x%05X)" % (what, name, field))
+        event("stage", stage="rom-checksum", ok=True, detail=detail, **fields)
+    elif ok is False:
+        print("[kline] ROM checksum of %s %s: MISMATCH (field 0x%05X, %s)"
+              % (what, name, field, detail))
+        if p0601 is True:
+            # Observed once, on one car -- and two factory images ship with the monitor on
+            # and a stale field, behaviour unobserved.  Hence "likely", and the evidence.
+            print("[kline]   the P0601 monitor is enabled in this image, so P0601 (\"ROM "
+                  "checksum\") is likely:")
+            print("[kline]   on the bench car a stale field raised it ~3 min after start "
+                  "(observed once).")
+            print("[kline]   If that is not intended, recompute the checksum in your "
+                  "calibration editor.")
+            print("[kline]   openm74 writes the bytes it is given.")
+        elif p0601 is False:
+            # From the disassembly, not from a run: no masked image has been on hardware.
+            print("[kline]   the P0601 monitor is masked off in this image; by its code the "
+                  "ECU should not")
+            print("[kline]   report it (read from disassembly, not observed) -- 11 factory "
+                  "versions ship like this.")
+        else:
+            print("[kline]   whether this image reports P0601 could not be read out of its "
+                  "code.")
+        event("problem", kind="rom_checksum", detail=detail, **fields)
     else:
-        print("[kline] ROM checksum of %s: not checked (%s)"
-              % (os.path.basename(path), detail))
-    event("rom-checksum", ok=ck, field=field, detail=detail, path=os.path.basename(path))
+        print("[kline] ROM checksum of %s %s: not checked -- %s" % (what, name, detail))
+        event("problem", kind="rom_checksum", detail="not checked: " + detail, **fields)
+    return ok
+
+
+def report_result_checksum(args, whole, payload):
+    """After the pre-flight backup: the ROM checksum of what the ECU will hold.
+
+    The file's own checksum is only the answer when the file is what ends up in flash.
+    --flash leaves the boot sector alone and a partial --write changes one range of an
+    image that is already there, so the only image whose checksum means anything is the
+    backup with this payload laid over it -- and the backup is already in memory."""
+    off = args.addr - FLASH_BASE
+    if len(whole) != FLASH_SIZE or (off == 0 and len(payload) == FLASH_SIZE):
+        return                      # the whole file goes in, and it was reported already
+    result = bytearray(whole)
+    result[off:off + len(payload)] = payload
+    if args.flash:
+        try:
+            if bytes(result) == open(args.flash, "rb").read():
+                return              # identical to the file, which was reported already
+        except OSError:
+            pass
+    rom_checksum_report(bytes(result), "ECU after this write", what="the", result=True)
 
 
 FLASH_BASE = 0xC00000
@@ -3125,6 +3157,11 @@ def report_boot_difference(args, whole):
           detail="the image's boot sector differs and is not being written")
 
 
+def will_backup(args):
+    m = MODES[args.mode]
+    return bool((m["backup"] or args.backup) and not args.no_backup)
+
+
 def run_monitor(k, args, payload, default_out):   # -> True if the job it did succeeded
     """Drive one monitor session.  The stage is already up and already knows, from its
     compiled-in segment mask, what this session is permitted to erase."""
@@ -3167,7 +3204,7 @@ def run_monitor(k, args, payload, default_out):   # -> True if the job it did su
             return False
     if args.write:
         m = MODES[args.mode]
-        if (m["backup"] or args.backup) and not args.no_backup:
+        if will_backup(args):
             if args.resume:
                 # Say what is true, which is less than this used to claim.  The earlier
                 # wording asserted "this backup is of a PART-WRITTEN ECU" on every resume --
@@ -3188,6 +3225,7 @@ def run_monitor(k, args, payload, default_out):   # -> True if the job it did su
                 # something to discover afterwards.  The backup just read is the ECU's own
                 # boot sector, so the comparison is free and needs no extra traffic.
                 report_boot_difference(args, whole)
+                report_result_checksum(args, whole, payload)
             except IOError as e:
                 event("result", what="write", ok=False, wrote_nothing=True,
                       message="the pre-flight backup failed: %s" % e)
@@ -3708,7 +3746,18 @@ def _main():
                 if len(img) != FLASH_SIZE:
                     sys.exit("[kline] --flash wants a full %d-byte image; %s is %d bytes"
                              % (FLASH_SIZE, args.flash, len(img)))
-                warn_rom_checksum(img, args.flash)
+                rom_checksum_report(img, args.flash)
+                if not will_backup(args):
+                    # The checksum covers the boot sector, which --flash leaves as the ECU has
+                    # it; only the backup can say whether that changes the result.
+                    print("[kline] no pre-flight backup: the ECU's boot sector is not compared "
+                          "with the image's, so")
+                    print("[kline] the ROM checksum of the result is not checked -- only the "
+                          "file's, above.")
+                    event("problem", kind="rom_checksum", label="ECU after this write",
+                          field=None, p0601=None, result=True,
+                          detail="not checked: no pre-flight backup to compare the boot "
+                                 "sector against")
                 # --flash is the WHOLE image at the ONE address it can go.  Silently
                 # overriding a typed --addr/--len/--image would erase 206 sectors for
                 # someone who asked for one -- the same silent cap that --write was just
@@ -3733,13 +3782,6 @@ def _main():
                 if args.addr is None:
                     sys.exit("[kline] --write needs --addr")
                 blobf = open(args.write, "rb").read()
-                # Only a whole image carries the ROM checksum; a fragment does not,
-                # so a partial write is reported as not-checked rather than guessed at.
-                if len(blobf) == FLASH_SIZE:
-                    warn_rom_checksum(blobf, args.write)
-                else:
-                    print("[kline] ROM checksum: partial write, not checked "
-                          "(the checksum covers the whole image)")
                 if args.image:
                     off = args.addr - FLASH_BASE
                     if off < 0 or off >= len(blobf):
@@ -3757,6 +3799,20 @@ def _main():
                              "0x%06X.  Refusing rather than writing less than you asked "
                              "for." % (args.length, os.path.basename(args.write),
                                        len(payload), args.addr))
+                # The checksum covers the whole image, so a file's own verdict is only worth
+                # giving when the whole file is what goes in.  Anything less is checked
+                # after the pre-flight backup, on the ECU's image with this range applied.
+                if args.addr == FLASH_BASE and len(payload) == FLASH_SIZE:
+                    rom_checksum_report(payload, args.write)
+                elif will_backup(args):
+                    print("[kline] ROM checksum: partial write -- checked after the "
+                          "pre-flight backup, on the image the ECU will hold")
+                else:
+                    print("[kline] ROM checksum: partial write with no pre-flight backup "
+                          "-- not checked (it covers the whole image)")
+                    event("problem", kind="rom_checksum", label=os.path.basename(args.write),
+                          field=None, p0601=None, result=True,
+                          detail="not checked: partial write and no backup to apply it to")
                 segmask = segmask_for(args.addr, len(payload), args.allow_boot)
             elif args.write_selftest is not None:
                 segmask = segmask_for(args.write_selftest,

@@ -1350,6 +1350,8 @@ class App:
         elif kind == "stage":
             if ev.get("stage") == "backup-saved" and ev.get("path"):
                 self.say(t("st.backup_at", ev["path"]))
+            if ev.get("stage") == "rom-checksum":
+                self.say(t("st.rom_ok", self._rom_label(ev)) + u"\n")
             key = self.STAGE_LABEL.get(ev.get("stage"))
             if ev.get("ok") is False:
                 key = None            # a stage that failed must not announce that it worked
@@ -1382,6 +1384,15 @@ class App:
                 self.say(t("st.protection_installed", ev.get("addr", 0)) + u"\n")
             elif k == "link_below_target":
                 self.say(t("st.link_below_target") + u"\n")
+            elif k == "rom_checksum":
+                # The verdict that decides whether the car comes back with P0601 lit.  The
+                # log says it in English; the window has to say it in the user's language.
+                if ev.get("field") is None:
+                    self.say(t("st.rom_unchecked", self._rom_label(ev)) + u"\n")
+                else:
+                    self.say(t("st.rom_mismatch", self._rom_label(ev))
+                             + t({True: "st.rom_p0601_on", False: "st.rom_p0601_off"}
+                                 .get(ev.get("p0601"), "st.rom_p0601_unknown")) + u"\n")
             elif k == "boot_sector_differs":
                 # The one problem that changes what the ECU ends up RUNNING: --flash never
                 # writes the boot sector, so an image carrying a different one is only
@@ -1390,6 +1401,10 @@ class App:
                 self.say(t("st.boot_differs", ev.get("differing", 0)) + u"\n")
         elif kind == "result":
             self.results.append(ev)
+
+    @staticmethod
+    def _rom_label(ev):
+        return t("st.rom_result") if ev.get("result") else ev.get("label", u"")
 
     @staticmethod
     def _eta(ev):

@@ -44,6 +44,14 @@ uv run openm74 --port COM3 --progress json --flash image.bin --yes
 * `problem` может нести дополнительные ключи (`known`, `fsr_op`, `fsr_prot`); считайте
   незнакомые ключи добавлением и не требуйте их наличия.
 
+Текущая сборка также сообщает контрольную сумму ПЗУ — файла до рукопожатия и образа
+ЭБУ с наложенной записью после предварительного бэкапа: `stage` `rom-checksum`, когда
+она сходится, и `problem` вида `rom_checksum`, когда не сходится или не может быть
+проверена. Оба несут `field` и `p0601` (собственная маска мониторов образа: `true`,
+`false` или `null`; оба `null`, если ничего не проверялось), `label` и `result` —
+`true`, когда это ЭБУ после этой записи, а не файл. В записи выше этих строк нет: она снята на
+железе до того, как они появились.
+
 Четыре вида, и словарь намеренно крошечный, чтобы он мог стоять на месте: `stage` — грубая
 веха, `progress` с `done`/`total`/`unit`, `problem` — переживаемое, о чём стоит сообщить, и
 `result` — исход этапа, который может пройти или провалиться.
@@ -120,6 +128,8 @@ uv run python tools/build_exe.py
 ```
 uv run python tests/test_monitor_offline.py    # blob vs assembler, patch sites, gate, framing
 uv run python tests/test_monitor_fakeecu.py    # end-to-end against a simulated ECU
+uv run python tests/test_checksum.py           # ROM checksum arithmetic, reserved sector
+uv run python tools/check_checksum_corpus.py   # checksum + P0601 mask on 120 images; skips without them
 uv run python tools/check_gui_platform.py      # the GUI's platform assumptions, on this OS
 uv run python tools/build_stages.py            # the .bin files vs the .asm they came from
 uv run python tools/check_docs_parity.py       # every number and identifier, English vs Russian

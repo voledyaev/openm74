@@ -293,6 +293,44 @@ STRINGS = {
         "en": u"→ the link is below what page programming wants: running at the slowest "
               u"rate, expect resends",
     },
+    # The ROM checksum verdict.  Reported, never enforced: openm74 writes the bytes it is
+    # given.  What a mismatch means depends on the image's own P0601 monitor mask.
+    "st.rom_ok": {
+        "ru": u"→ контрольная сумма ПЗУ (%s): сходится",
+        "en": u"→ ROM checksum (%s): OK",
+    },
+    "st.rom_mismatch": {
+        "ru": u"→ контрольная сумма ПЗУ (%s) НЕ СХОДИТСЯ: ",
+        "en": u"→ ROM checksum (%s) DOES NOT MATCH: ",
+    },
+    # Hedged on purpose: P0601 was observed once, on one car, and "masked off" is read from
+    # the disassembly, not from a run.
+    "st.rom_p0601_on": {
+        "ru": u"монитор P0601 в образе включён, вероятен P0601 (на стендовой машине — через "
+              u"~3 мин, наблюдалось один раз). Если это не задумано, пересчитайте сумму в "
+              u"редакторе калибровок",
+        "en": u"the P0601 monitor is enabled in this image, so P0601 is likely (on the bench "
+              u"car ~3 min after start, observed once). If that is not intended, recompute "
+              u"it in your calibration editor",
+    },
+    "st.rom_p0601_off": {
+        "ru": u"монитор P0601 в образе выключен — по коду блок не должен об этом сообщать "
+              u"(вывод из дизассемблера, на железе не проверялось)",
+        "en": u"the P0601 monitor is masked off in this image — by its code the ECU should "
+              u"not report it (read from disassembly, not observed on hardware)",
+    },
+    "st.rom_result": {
+        "ru": u"ЭБУ после этой записи",
+        "en": u"the ECU after this write",
+    },
+    "st.rom_p0601_unknown": {
+        "ru": u"включён ли в образе монитор P0601, определить не удалось",
+        "en": u"whether this image reports P0601 could not be determined",
+    },
+    "st.rom_unchecked": {
+        "ru": u"→ контрольная сумма ПЗУ (%s) не проверена — подробности в журнале",
+        "en": u"→ ROM checksum (%s) not checked — details in the log",
+    },
     "st.boot_differs": {
         "ru": u"→ загрузочный сектор образа отличается (%d байт) и НЕ записывается",
         "en": u"→ the image's boot sector differs (%d bytes) and is NOT being written",

@@ -13,11 +13,12 @@ over K-line, on the bench. Cross-platform, no vendor DLLs, no dongle, MIT licens
 
 * **Reads** the full 832 KB image in a single pass to a `.bin` file
 * **Writes** a full `.bin` image back, verifying every sector as it goes
-* Treats the image as opaque bytes — it does not parse, interpret or edit calibrations
+* Writes the image as opaque bytes — it never edits calibrations or rewrites a byte it
+  was given
 * **Reports the ROM checksum** of any image: on read, so a dump that is not
   self-consistent is visible; before a write, so an image that would raise `P0601`
-  is flagged. It warns, it does not block or recompute — openm74 writes the bytes it
-  is given
+  is flagged. To do that it reads the image's own machine code, and only to do that.
+  It warns, it does not block or recompute — openm74 writes the bytes it is given
 
 Both directions have been proven byte-exact on hardware: an image written by this tool
 and then read back by a *different* mechanism matched the source file 851968/851968.
@@ -274,26 +275,52 @@ loads code to a completely different address.
 
 ## ROM checksum
 
-The ECU keeps a 16-bit checksum of its own ROM and raises `P0601` about three
-minutes after start if the image does not add up to it. The dealer and loader tools
-do not recompute it, so an edited image flashed by them trips the code — a nuisance
-that hides real faults behind it.
+The ECU keeps a 16-bit checksum of its own ROM and, by its code, raises `P0601` when
+the image does not add up to it — while the `P0601` monitor is enabled in the image's
+monitor mask. On the bench car that took about three minutes after start — observed
+once, from an image written with a stale checksum. The dealer and loader tools do not recompute it, so
+an edited image flashed by them trips the code — a nuisance that hides real faults
+behind it.
 
 openm74 does not edit images, so it never needs to recompute the checksum. What it
 does is *report* it: `--verify FILE` and every dump print whether the image is
-self-consistent, and a full-image write prints the same before erasing anything. A
-mismatch is a warning, not a refusal — it may be an unfinished file, and recomputing
-it is the calibration editor's job, not the flasher's.
+self-consistent. A full-image `--flash` prints the same before the session starts,
+and again after the pre-flight backup if the boot sector it leaves alone makes the
+result differ from the file — the sum covers the boot sector, so a self-consistent
+image flashed onto an ECU with a different boot sector can end up inconsistent.
+Without a backup only the file is checked, and the run says so. A partial `--write` is checked after the backup, on the
+ECU's own image with that range laid over it — the file's checksum says nothing
+about what a fragment does to the ECU. A mismatch is a warning, not a refusal — it
+may be an unfinished file, and recomputing it is the calibration editor's job, not
+the flasher's.
 
-The algorithm is read out of each image's own machine code rather than from a table,
-because the summed range, the checksum field's position and whether the reserved
-sector `0x0F000` is included all vary between software versions. Measured against 120
-factory images, the routine is found in 119 (absent only in the pre-production
-`I414DA01`) and the computed value equals AvtoVAZ's own published checksum in 105 of
-the 107 the table lists — the two misses are single-digit typos in the table. A dump
-read off a block is reported correctly as-is: on all but the two earliest versions
-the reserved sector is outside the sum, and where it is inside, it is summed as the
-`9b 1e` the silicon returns.
+A mismatch is not by itself a promise of `P0601`, so the report says what the
+image's own monitor mask does with it: enabled, masked off, or not determined.
+"Masked off means not reported" is read from the disassembly; no masked image has
+been run on hardware.
+
+The algorithm and the monitor mask are read out of each image's own machine code
+rather than from a table, because the summed range, the checksum field's position
+and whether the reserved sector `0x0F000` is included all vary between software
+versions. Measured against 120 factory images (a corpus that is not in this
+repository; `tools/check_checksum_corpus.py` re-derives every number here when it is
+given one):
+
+| | |
+|---|---|
+| checksum routine found | 119 of 120 — absent only in the pre-production `I414DA01` |
+| computed = AvtoVAZ's published checksum | 105 of the 109 the table lists |
+| computed = the image's own field | 106 of 119 |
+| field stale, `P0601` masked off | 11 — 7 of them carry the checksum of another version in the corpus |
+| field stale, `P0601` enabled | 2 — `I465AI01`, `I484DH01`; what the ECU does with them has not been observed |
+
+Of the four misses against the published table, two are single-digit typos in the
+table (`I444GS10`, `I484DK05`: the image's own field agrees with the computation).
+The other two are the earliest versions, `I414DB02` and `I444CB02`, the only ones
+whose routine sums the reserved sector. The table matches them with that sector
+as zeros; the factory's own field in both images matches it only as `9b 1e` — what
+that sector reads back as on the bench unit — and that is how it is summed here, so
+a dump read off a block is reported correctly as-is.
 
 ## Status and limitations
 

@@ -42,6 +42,14 @@ particular:
 * a `problem` may carry extra keys (`known`, `fsr_op`, `fsr_prot`); treat unknown keys as
   additive and do not require them.
 
+The current build also reports the ROM checksum — of the file before the handshake, and
+of the ECU's image with the write laid over it after the pre-flight backup: a `stage` of
+`rom-checksum` when it adds up, a `problem` of kind `rom_checksum` when it does not or
+cannot be checked. Both carry `field` and `p0601` (the image's own monitor mask: `true`,
+`false` or `null`; both `null` when nothing was checked), `label`, and `result` — `true`
+when the image is the ECU after this write rather than a file. Those lines are not in the capture above, which was taken
+on hardware before they existed.
+
 Four kinds, and the vocabulary is deliberately tiny so it can stay still: `stage` for a
 coarse milestone, `progress` with `done`/`total`/`unit`, `problem` for something survivable
 worth surfacing, and `result` for the outcome of a phase that can pass or fail.
@@ -115,6 +123,8 @@ looks like a corrupt download.
 ```
 uv run python tests/test_monitor_offline.py    # blob vs assembler, patch sites, gate, framing
 uv run python tests/test_monitor_fakeecu.py    # end-to-end against a simulated ECU
+uv run python tests/test_checksum.py           # ROM checksum arithmetic, reserved sector
+uv run python tools/check_checksum_corpus.py   # checksum + P0601 mask on 120 images; skips without them
 uv run python tools/check_gui_platform.py      # the GUI's platform assumptions, on this OS
 uv run python tools/build_stages.py            # the .bin files vs the .asm they came from
 uv run python tools/check_docs_parity.py       # every number and identifier, English vs Russian

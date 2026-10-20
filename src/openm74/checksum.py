@@ -14,10 +14,11 @@ every version rather than for the ones someone wrote down.
 
 MEASURED against 120 factory images (a public set of serial M74 images): the routine
 is found in 119 of them (absent only in the pre-production I414DA01), and the
-computed value equals AvtoVAZ's own published checksum in 105 of the 107 that
-the table lists -- the two misses are single-digit typos in the table, where the
-value stored in the image itself matches this computation.  The machine code of
-the routine, run in an emulator, produces the same number.
+computed value equals AvtoVAZ's own published checksum in 105 of the 109 that
+the table lists.  Two misses are single-digit typos in the table (I444GS10,
+I484DK05), where the image's own field matches this computation; the other two
+are I414DB02 and I444CB02, below.  tools/check_checksum_corpus.py re-derives
+every number in this paragraph from the corpus, which is not in this repository.
 
 What the ECU does (confirmed by disassembly; file offsets, physical = +0xC00000):
 
@@ -36,10 +37,30 @@ What the ECU does (confirmed by disassembly; file offsets, physical = +0xC00000)
                                (510), so the result does not depend on what the
                                field currently holds.
 
-The reserved sector 0x0F000 reads back as the repeated pattern 9b 1e on the
-chip, whatever a file holds there.  Where the routine sums it (the two earliest
-versions), this computes it as 9b 1e, because that is what the silicon sums; a
-dump read off a block therefore checks out as-is, with no need to zero it.
+The reserved sector 0x0F000 reads back as the repeated pattern 9b 1e on the bench
+unit (docs/FINDINGS.md).  Where the routine sums it -- the two earliest versions,
+I414DB02 and I444CB02 -- this computes it as 9b 1e, and the factory's own stored
+field in both images agrees only with that reading, not with the zeros the files
+hold there.  A dump read off a block therefore checks out as-is.
+
+A field that does not add up is not by itself a promise of P0601.  By the
+disassembly -- not by a run on hardware -- the ECU only reports it while the P0601
+monitor is enabled in the image's monitor mask, and 11 of the 119 factory images
+ship with that byte at zero and a stale field (7 of the 11 carry the checksum of
+another version in the corpus).  So a mismatch is reported together with
+what the image's own mask says, read out of its code the same way:
+
+    the mask           from the monitor dispatcher: movb RL1,[cnt];
+                       movb RL1,[r12+#mask]; jmpr cc_EQ (C2 FC cc cc F4 2C mm mm 2D)
+    the monitor count  from the end of the dispatcher loop
+    the DTC tables     from the index->code translation (four parallel tables);
+                       P0601 is the index whose tables hold 0x0601 -- 49 on all 119
+
+MEASURED on the same corpus: the mask puts all 11 stale-field versions at zero.
+Two more, I465AI01 and I484DH01, have the monitor enabled and a field that does
+not add up; what the ECU does with them has not been observed.  P0601 itself has
+been observed once, on the bench car (I444GI04, monitor enabled), from an image
+written with a stale field, about three minutes after start.
 """
 
 import re
@@ -160,17 +181,88 @@ def verify(data, p):
     return stored(data, p) == expected(data, p)
 
 
+# Monitor dispatcher: movb RL1,[cnt]; movb RL1,[r12+#mask]; jmpr cc_EQ.
+_RE_DISP = re.compile(rb"\xc2\xfc(..)\xf4\x2c(..)\x2d", re.S)
+# Index -> DTC translation: a selector under EXTP, then four parallel tables.
+_RE_TRANS = re.compile(
+    rb"\xf0\x1c\xc0\x2c\xd7\x40(..)\xf4\x4c(..)"
+    rb"\x9a\xf2.\x00\xc0\x2d\x5c\x1d\xd4\x4d(..)\x0d."
+    rb"\x9a\xf2.\x10\xc0\x2d\x5c\x1d\xd4\x4d(..)\x0d."
+    rb"\x9a\xf2.\x20\xc0\x2d\x5c\x1d\xd4\x4d(..)\x0d."
+    rb"\xc0\x2d\x5c\x1d\xd4\x4d(..)\xdb\x00", re.S)
+_P0601 = 0x0601
+_NO_CODE = 0xFFFF
+
+
+def _to_file(a16, dpp):
+    """A 16-bit data address to a file offset, through a DPP that holds exactly one page."""
+    pages = dpp.get(a16 >> 14, [])
+    pages = [p for p in pages if p >= 0x320]
+    if len(pages) != 1:
+        return None
+    return ((pages[0] - 0x300) << 14) | (a16 & 0x3FFF)
+
+
+def _monitor_count(code, cnt, start):
+    """Number of monitors, from the end of the dispatcher loop (two compiled forms)."""
+    c = re.escape(cnt)
+    m = re.compile(rb"\x25\x8f" + c
+                   + rb"(?:\xc2[\xf0-\xff]" + c + rb"\x46[\xf0-\xff](..)\xbd"
+                   + rb"|\xf3[\xf0-\xff]" + c + rb"\x47[\xf0-\xff](.)\x00\xfd)",
+                   re.S).search(code, start, start + 0x100)
+    if not m:
+        return None
+    return (struct.unpack("<H", m.group(1))[0] if m.group(1) else m.group(2)[0]) + 1
+
+
+def p0601_monitor(data):
+    """True if the image's monitor mask has P0601 enabled, False if it is masked off,
+    None if the mask or the DTC tables cannot be found in this image's code."""
+    code = data[:CODE_END]
+    dpp = _dpp_layout(data)
+    disp = list(_RE_DISP.finditer(code))
+    masks = {struct.unpack("<H", m.group(2))[0] for m in disp}
+    if len(masks) != 1:
+        return None
+    mask = _to_file(masks.pop(), dpp)
+    count = _monitor_count(code, disp[0].group(1), disp[0].end())
+    tr = list(_RE_TRANS.finditer(code))
+    if mask is None or count is None or len(tr) != 1:
+        return None
+    tables = [_to_file(struct.unpack("<H", tr[0].group(i))[0], dpp) for i in range(3, 7)]
+    if None in tables:
+        return None
+    hits = [i for i in range(count)
+            if any(t + 2 * i + 2 <= len(data)
+                   and struct.unpack("<H", data[t + 2 * i:t + 2 * i + 2])[0] == _P0601
+                   for t in tables)]
+    # Exactly one index, or the layout is not the one this was measured on.
+    if len(hits) != 1 or mask + hits[0] >= len(data):
+        return None
+    return data[mask + hits[0]] != 0
+
+
 def status(data):
-    """(ok, field, detail) for a full image, or (None, None, reason) if undeterminable.
+    """(ok, field, detail, p0601) for a full image.
 
     ok is True when the stored field matches the computation, False when it does
-    not.  None means this is not an M74/M74 CAN image this module understands --
-    not a verdict on the checksum.
+    not, and None when this is not an M74/M74 CAN image this module understands --
+    not a verdict on the checksum (field is then None too).  p0601 is what the
+    image's monitor mask says about the P0601 monitor: True enabled, False masked
+    off, None not determined.  It is what turns a mismatch into "expect P0601" or
+    into "this image does not report it".
     """
     if len(data) < CODE_END:
-        return None, None, "image shorter than the code region"
+        return None, None, "image shorter than the code region", None
     p = find_params(data)
     if p is None:
-        return None, None, "no M74 checksum routine in this image's code"
+        return None, None, "no M74 checksum routine in this image's code", None
+    # A truncated read -- a one-shot that stalled at 530 KB -- still has the code and so
+    # the routine, but not all the bytes it sums.  Its verdict would be a false MISMATCH
+    # at best and an IndexError at worst, raised where a short read must be reported.
+    end = max((page - 0x300) * PAGE + limit + 1 for page, limit in p.routine)
+    if len(data) < max(end, p.field + 4):
+        return None, None, "image shorter than the range its checksum covers", None
     cur, exp = stored(data, p), expected(data, p)
-    return cur == exp, p.field, "stored %s, computed %s" % (cur.hex(), exp.hex())
+    return (cur == exp, p.field, "stored %s, computed %s" % (cur.hex(), exp.hex()),
+            p0601_monitor(data))
