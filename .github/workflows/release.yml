@@ -97,7 +97,8 @@ jobs:
           path: artifacts
       - name: collect the hashes into one list
         run: |
-          find artifacts -name '*.sha256' -exec cat {} \; | sort > SHA256SUMS.txt
+          # tr: a hash file built on Windows must not carry \r into the one list everyone checks
+          find artifacts -name '*.sha256' -exec cat {} \; | tr -d '\r' | sort > SHA256SUMS.txt
           cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v3
         with:

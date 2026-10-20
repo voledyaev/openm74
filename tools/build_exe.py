@@ -261,7 +261,10 @@ def main():
 
     data = open(shipped, "rb").read()
     digest = hashlib.sha256(data).hexdigest().upper()
-    with open(shipped + ".sha256", "w") as f:
+    # newline="\n": text mode on Windows writes \r\n, and `sha256sum -c` on Linux and macOS
+    # then looks for a file called "openm74.exe\r" -- MEASURED on the v1.0.0 and v1.0.1
+    # SHA256SUMS.txt, whose .exe line nobody outside Windows could check.
+    with open(shipped + ".sha256", "w", newline="\n") as f:
         f.write("%s *%s\n" % (digest, os.path.basename(shipped)))
     print("\nbuilt: %s\n%d bytes\nsha256 %s" % (shipped, len(data), digest))
     print("Hash written next to it; publish both.")
