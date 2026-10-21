@@ -37,8 +37,8 @@ def synthetic_image():
 
 
 REF = synthetic_image()
-K.REF_BIN = os.path.join(TMP, "reference.bin")          # the host compares against this
-open(K.REF_BIN, "wb").write(REF)
+REFERENCE = os.path.join(TMP, "reference.bin")          # the host compares against this
+open(REFERENCE, "wb").write(REF)
 os.chdir(TMP)                               # backups the tool drops land here too
 FAILS = []
 
@@ -343,7 +343,7 @@ def run(argv, image=REF):
     sys.stdout = io.StringIO()
     code = 0
     try:
-        sys.argv = ["klinebsl.py", "--port", "FAKE"] + argv
+        sys.argv = ["klinebsl.py", "--port", "FAKE", "--reference", REFERENCE] + argv
         # `or 0`, because main() RETURNS the status now -- discarding it is what made every
         # exit-code assertion in this file vacuous, and is the same mistake the module's own
         # __main__ was making until the bench caught it.
@@ -825,7 +825,7 @@ print("[16c] the rate constant is learned from the ECU, not assumed")
 # PROTOCOL 5: the divider is read back from the unit in front of us so the arithmetic is
 # calibrated to THAT board's clock.  A different PLL setting would otherwise send every
 # subsequent rate change to the wrong place.
-_before = K.BAUD_CONST
+_before = K.current_session().baud_const
 out, ecu, _ = run(["--monitor"])
 check("the divider register was actually read",
       any(c == K.CMD_READ and a == K.BRG_ADDR for c, a, _, _ in ecu.log))
@@ -833,8 +833,8 @@ check("and the constant was derived from it, not left at the default",
       "rate constant from this ECU" in out, out.splitlines()[-1][:60])
 check("9600 x (130+1) is what it computes", "1257600" in out or "1258000" in out
       or ("%d" % (9600 * 131)) in out, "expected %d" % (9600 * 131))
-check("and it does not leak into the next session", _before == K.BAUD_CONST,
-      "%.0f vs %.0f" % (K.BAUD_CONST, _before))
+check("and it does not leak into the next session", _before == K.current_session().baud_const,
+      "%.0f vs %.0f" % (K.current_session().baud_const, _before))
 
 print("[17] checksum still catches a sector that did not take")
 _real = FakeECU              # bound BEFORE the name is rebound, or the call recurses
@@ -902,7 +902,8 @@ def run_json(argv, image=REF):
     sys.stdout, sys.stderr = out_s, err_s
     code = 0
     try:
-        sys.argv = ["klinebsl.py", "--port", "FAKE", "--progress", "json"] + argv
+        sys.argv = ["klinebsl.py", "--port", "FAKE", "--reference", REFERENCE,
+                    "--progress", "json"] + argv
         code = K.main() or 0
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else 1
@@ -1350,7 +1351,7 @@ check("--verify refuses a file that is not the reference's length", rc != 0)
 check("and does not call a partial comparison BYTE-IDENTICAL", "BYTE-IDENTICAL" not in out)
 check("and says which lengths disagree", "LENGTH MISMATCH" in out)
 
-out, _, rc = run(["--verify", K.REF_BIN])
+out, _, rc = run(["--verify", REFERENCE])
 check("but the real thing still passes", rc == 0 and "BYTE-IDENTICAL" in out)
 
 # --stitch with segments missing: the old code wrote a shifted image over whatever was at

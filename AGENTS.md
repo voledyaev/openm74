@@ -44,6 +44,7 @@ and reconstructing five.
 | Path | What lives there |
 |---|---|
 | `src/openm74/klinebsl.py` | the engine and the CLI: transport, the monitor's command protocol, flash operations, the event stream. One module, ~3500 lines, deliberately not split — every hardware-proven behaviour is in it and the seams (transport / monitor / flash / CLI) are worth naming before cutting, not after |
+| `src/openm74/session.py` | per-operation settings, output routing and cancellation |
 | `src/openm74/checksum.py` | ROM checksum discovery and calculation, stored-field comparison and P0601 monitor-mask detection |
 | `src/openm74/gui.py` | the Tk interface. Drives the engine through the same session entry point the CLI does, so a button cannot drift from a terminal |
 | `src/openm74/i18n.py` | the string catalogue, ru and en. The interface is translated; the engine's log is not, on purpose — see the file's own header |
@@ -260,11 +261,16 @@ Do not append automatic AI coauthor or generator signatures to commit messages.
 
 ## Session API
 
-`klinebsl.main(argv=None, *, log=None, events=None)` accepts arguments without the
-executable name and optional text streams. The GUI supplies queue-backed streams;
-never replace process-wide `sys.argv`, `sys.stdout` or `sys.stderr` from its worker.
-Human output is routed through the engine's context-local print wrapper; JSON events
-use the supplied event stream when `--progress json` is selected. Hardware settings
-remain module-wide: a second concurrent session is explicitly rejected before state
-changes. A future multi-ECU API must move those settings and cancellation into per-session
-state before removing that guard.
+`klinebsl.main(argv=None, *, log=None, events=None, session=None)` accepts arguments without
+the executable name and optional text streams. Create a fresh `Session` for each operation;
+it owns runtime settings, output and a thread-safe stop event. The GUI constructs it before
+starting its non-daemon worker and calls `session.request_stop()` when closing. Never clear
+that request at worker entry: it may have arrived before the thread started. Reusing a
+session is rejected. Context-local access serves low-level engine helpers; never replace
+process-wide `sys.argv`, `sys.stdout` or `sys.stderr` from a worker.
+
+One active bench operation per process remains an explicit ownership guard. GUI close is
+asynchronous: keep draining events until the engine closes its transport and the worker
+returns. Do not impose a deadline that kills a write between erase and program. A read is
+allowed to finish before closing. macOS builds use onedir bundles; Windows and Linux remain
+onefile executables.

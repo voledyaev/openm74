@@ -31,6 +31,11 @@ jobs:
         run: |
           uv python install 3.14
           echo "UV_PYTHON=3.14" >> "$GITHUB_ENV"
+      - name: Linux offline GUI bridge tests need Tk bindings
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
       - run: uv sync
       - run: uv run --with ruff ruff check .
       - run: uv build

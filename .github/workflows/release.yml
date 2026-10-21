@@ -47,6 +47,11 @@ jobs:
         run: |
           uv python install 3.14
           echo "UV_PYTHON=3.14" >> "$GITHUB_ENV"
+      - name: Linux prerequisites for tests and the application build
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk libpython3-dev
       - run: uv sync
 
       # The same checks that guard a push guard a release. A build that ships is a worse
@@ -68,8 +73,6 @@ jobs:
       - name: build (Linux needs a display and the parts Ubuntu ships separately)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb python3-tk libpython3-dev
           xvfb-run -a uv run python tools/build_exe.py
       - name: build
         if: runner.os != 'Linux'

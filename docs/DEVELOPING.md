@@ -79,15 +79,20 @@ holds the contract in place.
 
 ## Calling from Python
 
-`klinebsl.main(argv=None, *, log=None, events=None)` accepts arguments without the
+`klinebsl.main(argv=None, *, log=None, events=None, session=None)` accepts arguments without the
 executable name and returns a process exit status. Pass text streams as `log` and `events`
 to receive human output and, with `--progress json`, JSON events. The GUI uses this API
 without replacing process-wide streams or arguments. Argument parsing may raise `SystemExit`.
 
-Only one session may run per process: overlapping calls raise `RuntimeError` before changing
-hardware settings. Call `request_stop()` to request a stop at a sector boundary. Multi-ECU
-operation requires separate processes until hardware settings and cancellation are held in
-per-session state.
+Create a fresh `Session` for each operation and pass it as `session`. It owns settings,
+log, events and cancellation. Calling `session.request_stop()` from the GUI thread is
+preserved even if the worker has not started. Bare `request_stop()` applies only to the
+engine's current context. Reusing an object raises `RuntimeError`. Overlapping operations
+in one process are still rejected: adapter ownership is not shared between operations.
+
+On GUI close, a write stops at a sector boundary; the window waits for transport cleanup
+and the final events. No timeout kills the worker. A read finishes before the window closes.
+The operation thread is not a daemon that can be terminated with the GUI.
 
 Build and check the Python distribution with `uv build`, then
 `uv run python tools/check_package.py`. The latter installs the wheel outside the checkout

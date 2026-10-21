@@ -96,12 +96,11 @@ def engine(verdict, fn, *a, **kw):
     """Run fn with checksum.status stubbed to `verdict`; return (stdout, events)."""
     real, out, ev = C.status, io.StringIO(), io.StringIO()
     C.status = lambda d: verdict
-    old_out, old_ev = sys.stdout, K._EVENT_OUT
-    sys.stdout, K._EVENT_OUT = out, ev
     try:
-        fn(*a, **kw)
+        with K.Session(log=out, events=ev).activate():
+            fn(*a, **kw)
     finally:
-        C.status, sys.stdout, K._EVENT_OUT = real, old_out, old_ev
+        C.status = real
     return out.getvalue(), [json.loads(x) for x in ev.getvalue().splitlines()]
 
 print("[6] the engine's report, per verdict")

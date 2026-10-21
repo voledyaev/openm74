@@ -10,7 +10,7 @@ The GUI does not reimplement anything: it builds the same command line the CLI t
 runs klinebsl's own main(), capturing its output.  So the button and the terminal do
 exactly the same thing, and the tested core stays untouched.
 """
-import io, json, os, queue, sys, threading, time
+import io, json, os, queue, sys, threading
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, font as tkfont
@@ -732,7 +732,9 @@ class App:
         self.last_was_write = False
         self.results = []
         self._unmapped_regions = self._unmapped_bytes = 0
-        self._baud = None           # last rate the engine reported; see on_close()
+        self.session = None
+        self._worker = None
+        self._closing = False
         self._evbuf = ""
         root.title(t("app.title"))
         self.set_window_icon(root)
@@ -1000,37 +1002,34 @@ class App:
 
     # --- helpers ------------------------------------------------------------
     def on_close(self):
-        """Confirm before stopping a write, then stop it at a sector boundary if we can.
+        """Keep the event loop alive until the engine has closed its transport.
 
-        The worker is a daemon thread, so destroying the window would end the process and
-        the thread with it -- mid-erase if that is where it happened to be, with the port
-        dropped by the operating system rather than closed by us.  Asking the engine to
-        stop instead means the write ends between sectors, where everything behind it is
-        verified and nothing ahead has been touched, and the port is drained and closed on
-        the way out.  Bounded: if the engine does not reach a boundary in time (a sector is
-        about two seconds), we go anyway rather than refusing to close the window."""
-        if self.busy and not messagebox.askokcancel(t("dl.quit_title"), t("dl.quit_body")):
+        No deadline can prove a sector has finished. A slow erase or a transport stall
+        must not turn the window's close button into an implicit process kill.
+        """
+        if self._closing:
             return
         if self.busy:
-            K.request_stop()
-            self.status.set(t("st.stopping"))
-            self.root.update_idletasks()
-            # How long to allow is NOT a constant.  A sector takes about two seconds at
-            # 115200 and twelve at 19200, and the engine steps down that ladder by itself on
-            # a poor link -- which is the link where someone is most likely to reach for the
-            # close button.  A fixed eight seconds therefore expired mid-sector at exactly
-            # the rates that need it most, killing the thread between an erase and its
-            # programming: the state this whole mechanism exists to avoid.  Ask the engine
-            # instead, from the rate it last reported, and fall back to the slowest rung.
-            baud = self._baud or min(K.RUN_LADDER)
-            deadline = time.time() + K.sector_seconds(baud) * 1.5 + 2.0
-            while self.busy and time.time() < deadline:
-                self.root.update()
-                time.sleep(0.05)
+            title = "dl.quit_title" if self.last_was_write else "dl.quit_read_title"
+            body = "dl.quit_body" if self.last_was_write else "dl.quit_read_body"
+            if not messagebox.askokcancel(t(title), t(body)):
+                return
+        self._closing = True
+        if self.busy:
+            self.session.request_stop()
+            self.status.set(t("st.stopping" if self.last_was_write else "st.waiting_read"))
+        self._poll_close()
+
+    def _poll_close(self):
+        # busy stays set until drain() has consumed the final log and verdict. The
+        # thread check also covers the interval between queuing "done" and returning.
+        if self.busy or (self._worker is not None and self._worker.is_alive()):
+            self.root.after(80, self._poll_close)
+            return
         try:
             if self.logfh:
                 self.logfh.close()
-        except Exception:
+        except OSError:
             pass
         self.root.destroy()
 
@@ -1199,7 +1198,7 @@ class App:
 
     # --- running the real tool ---------------------------------------------
     def run(self, argv, title):
-        if self.busy:
+        if self.busy or self._closing:
             return
         if not self.port_name():
             messagebox.showerror(t("app.title"), t("dl.no_adapter"))
@@ -1213,7 +1212,7 @@ class App:
         self.results = []           # this run's verdicts; finish() decides from these alone
         # Counted from the per-region problem events, which are emitted once each.
         self._unmapped_regions = self._unmapped_bytes = 0
-        self._baud = None           # last rate the engine reported; see on_close()
+        self.session = K.Session()
         self._evbuf = ""
         self.status.set(title)
         import datetime
@@ -1228,7 +1227,8 @@ class App:
         # this interface could say.
         self.log.mark_set("runstart", "end-1c")
         self.log.mark_gravity("runstart", "left")
-        threading.Thread(target=self.worker, args=(argv,), daemon=True).start()
+        self._worker = threading.Thread(target=self.worker, args=(argv,), daemon=False)
+        self._worker.start()
 
     def worker(self, argv):
         """Run the CLI's own main() so the button cannot drift from the terminal.
@@ -1256,7 +1256,7 @@ class App:
             # whatever the events said, could never fire.  exit_status() is the same
             # normaliser the console entry point uses, so the button and the terminal agree.
             code = K.main(argv[1:], log=Pipe(self.q, "log"),
-                          events=Pipe(self.q, "event"))
+                          events=Pipe(self.q, "event"), session=self.session)
         except SystemExit as e:
             code = e.code if isinstance(e.code, int) else 1
             if isinstance(e.code, str):
@@ -1459,11 +1459,8 @@ class App:
             text = self.log.get("runstart", "end")
         except tk.TclError:
             text = self.log.get("1.0", "end")       # no run has started yet
-        if ("BYTE-IDENTICAL" in text or "WRITE COMPLETE AND VERIFIED" in text
-                or "DUMP COMPLETE" in text):
-            self.bar["value"] = 100
-            self.status.set(t("st.done_verified"))
-            return
+        # Success requires a structured result, even if the log contains a success
+        # phrase. It may have been printed just before an exception or lost event.
         # A write that did not finish is the one case where the next attempt should behave
         # differently, so arm it here rather than expecting the user to know that.
         if self.last_was_write and not self.resume.get():

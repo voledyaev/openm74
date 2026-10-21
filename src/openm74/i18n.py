@@ -420,13 +420,26 @@ STRINGS = {
               u"X1:A4 and X1:B2 BEFORE main power.\n\nThen press OK — the program starts "
               u"immediately.",
     },
-    "dl.quit_title": {"ru": u"Идёт запись", "en": u"A write is in progress"},
+    "dl.quit_title": {"ru": u"Остановить запись?", "en": u"Stop the write?"},
     "dl.quit_body": {
-        "ru": u"Сейчас идёт запись в ЭБУ. Если закрыть программу, запись оборвётся на "
-              u"середине и блок не запустится, пока её не довести до конца.\n\n"
-              u"Закрыть всё равно?",
-        "en": u"A write to the ECU is in progress. Closing now interrupts it midway and the "
-              u"ECU will not run until the write is completed.\n\nClose anyway?",
+        "ru": u"Программа завершит текущий сектор, закроет адаптер и затем окно. "
+              u"Полная прошивка может остаться записанной частично; для завершения "
+              u"потребуется повторная запись с продолжением.\n\n"
+              u"Не отключайте питание и кабель, пока окно не закроется. Продолжить?",
+        "en": u"The current sector will finish before the adapter and window close. "
+              u"The full image may remain partly written; resume the write to finish it.\n\n"
+              u"Keep power and the cable connected until the window closes. Continue?",
+    },
+    "dl.quit_read_title": {"ru": u"Закрыть после чтения?", "en": u"Close after reading?"},
+    "dl.quit_read_body": {
+        "ru": u"Окно закроется после завершения чтения и закрытия адаптера. "
+              u"До этого не отключайте питание и кабель. Продолжить?",
+        "en": u"The window will close after the read finishes and the adapter closes. "
+              u"Keep power and the cable connected until then. Continue?",
+    },
+    "st.waiting_read": {
+        "ru": u"Дожидаемся завершения чтения и закрытия адаптера…",
+        "en": u"Waiting for the read to finish and the adapter to close…",
     },
     "dl.confirm_title": {"ru": u"Подтверждение записи", "en": u"Confirm the write"},
     "dl.confirm_body": {

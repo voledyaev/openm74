@@ -48,6 +48,7 @@ import hashlib
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 
@@ -76,7 +77,7 @@ if not os.path.exists(_ICON):
     _ICON = os.path.join(ICONS, "openm74.png")
 
 CMD = [sys.executable, "-m", "PyInstaller",
-       "--onefile",                     # one file, run it from anywhere
+       "--onedir" if IS_MAC else "--onefile",  # a macOS bundle contains its libraries
        "--windowed",                    # no console behind the GUI; on macOS, a real .app
        "--name", "openm74",
        "--paths", SRC,
@@ -248,13 +249,16 @@ def main():
     selftest(exe)
     if IS_MAC:
         check_signature(shipped)
-        # --onefile --windowed leaves the plain executable next to the bundle as well.
-        # It is the same program, but it is not what ships, and two 12 MB artifacts with
-        # different hashes in one directory is how the wrong one ends up published.
+        # PyInstaller leaves its intermediate collection beside the finished bundle.
+        # Only the .app is shipped; its executable and libraries have already passed
+        # the self-test and signature check independently of this directory.
         loose = os.path.join(DIST, "openm74")
         if os.path.exists(loose):
-            os.remove(loose)
-            print("  removed the redundant loose binary; the bundle is the artifact")
+            if os.path.isdir(loose):
+                shutil.rmtree(loose)
+            else:
+                os.remove(loose)           # a previous onefile build may have left a file
+            print("  removed the intermediate collection; the bundle is the artifact")
         shipped = package(shipped)
 
     data = open(shipped, "rb").read()

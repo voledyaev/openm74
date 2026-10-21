@@ -30,28 +30,13 @@ even if the host is wrong; a write session enables only the segments --addr/--le
 Erased flash on this part reads back as 0x00, not 0xFF.
 Power-cycle the ECU (A4/B2 asserted) before each run so the BSL is freshly armed.
 """
-import sys, os, time, argparse, json
-import builtins
+import sys, os, time, json
 import threading
-from contextvars import ContextVar
+from .session import Session, SessionParser, current_session, print_log as print
 
-
-# The GUI runs the engine on a worker. Routing this module's log must never replace
-# process-wide streams: Tk callbacks and unrelated threads still own their own output.
-_LOG_OUT = ContextVar("openm74_log", default=None)
+# Keep one physical bench operation per process. Session state is independent, but
+# multiple simultaneous operations on the same adapter still need an ownership policy.
 _RUN_LOCK = threading.Lock()
-
-
-def print(*args, **kwargs):
-    if "file" not in kwargs:
-        kwargs["file"] = _LOG_OUT.get() or sys.stdout
-    builtins.print(*args, **kwargs)
-
-
-class SessionParser(argparse.ArgumentParser):
-    def _print_message(self, message, file=None):
-        if message:
-            (_LOG_OUT.get() or file or sys.stderr).write(message)
 
 try:
     import serial
@@ -201,7 +186,6 @@ ONESHOT_START = ONESHOT_ECHO + PREAMBLE_LEN         # where the flash payload be
 # There is no default and none is shipped: a dump is one vehicle's data.  Set it with
 # --reference, or the OPENM74_REFERENCE environment variable.  Everything that uses it
 # degrades quietly when it is absent.
-REF_BIN = os.environ.get("OPENM74_REFERENCE", "")
 
 # ---------------------------------------------------------------------------
 # FLASH MONITOR (stage-2 alternative): erase / program / read back in ONE session.
@@ -293,7 +277,6 @@ MON_MARKERS = 2
 # ECU's USIC drives both directions from one generator; and repeated failures on the SAME
 # page, which no random-noise model explains either.  With the port left alone the effect
 # is gone: 0 recovery events across a whole 832 KB image at 115200.
-SETTLE_S = 0.002
 
 # How long to wait for a reply before assuming the line swallowed a byte and poking it.
 # Getting this wrong costs both ways, and I got it wrong in both directions before
@@ -320,7 +303,6 @@ SETTLE_S = 0.002
 # genuine stall in under a second instead of over two, and nothing observed since has argued
 # for waiting longer.  Tuned empirically; do not "fix" it from first principles without
 # measuring, and do not restore the idle story to justify it.
-STATUS_LOOK = 0.8
 
 # Two modes instead of asking the user to pick a baud rate -- picking a baud is an
 # engineering decision, not a user preference.  The people who need this tool are
@@ -370,7 +352,6 @@ CMD_BAUD, CMD_CKSUM = 6, 7
 # of it and recomputes this for that unit, because a different clock setup would put
 # every rate change in the wrong place.
 BRG_ADDR = 0x20401E     # serial peripheral, baud rate generator, high word (= PDIV)
-BAUD_CONST = 1243200.0
 
 # ---------------------------------------------------------------------------
 # WHAT THE FLASH CONTROLLER ITSELF SAYS
@@ -628,7 +609,6 @@ def check_identity(k, force=False):
 #   result    the outcome of a phase that can pass or fail: read, write, verify.
 #             THE VERDICT RULE: an operation succeeded iff at least one result arrived and
 #             none of them said ok=false.  Absence of results is not success.
-_EVENT_OUT = None       # JSON sink for the active session, separate from its human log
 
 
 def event(kind, /, **fields):
@@ -638,12 +618,12 @@ def event(kind, /, **fields):
     kind="unwritable", ...)` is the natural way to write a problem event, and with an
     ordinary parameter that call collides with this function's own signature -- which it
     did, on the one code path that only runs when a region turns out not to be flash."""
-    if _EVENT_OUT is None:
+    if current_session().events is None:
         return
     fields["event"] = kind
     try:
-        _EVENT_OUT.write(json.dumps(fields, sort_keys=True) + "\n")
-        _EVENT_OUT.flush()
+        current_session().events.write(json.dumps(fields, sort_keys=True) + "\n")
+        current_session().events.flush()
     except Exception:
         pass            # a front end that closed its pipe must not take the flash job down
 
@@ -666,8 +646,8 @@ def cksum16(data):
 
 def pdiv_for(baud):
     """Divider for a target baud, and the baud it will really produce."""
-    p = max(1, round(BAUD_CONST / baud) - 1)
-    return p, BAUD_CONST / (p + 1)
+    p = max(1, round(current_session().baud_const / baud) - 1)
+    return p, current_session().baud_const / (p + 1)
 PAGE, SECTOR = 128, 4096        # program granularity / erase-sector granularity
 BOOT_END = 0xC02000             # boot sector: refused unless --allow-boot
 MON_STATUS = {MON_OK: "ok", MON_REFUSED: "REFUSED by the segment gate",
@@ -1148,8 +1128,8 @@ class KlineBSL:
                       count & 0xFF, (count >> 8) & 0xFF])
 
     def _settle(self):
-        """Let K climb back to recessive before we drive it (see SETTLE_S)."""
-        time.sleep(SETTLE_S)
+        """Let K climb back to recessive before we drive it (see Session.settle)."""
+        time.sleep(current_session().settle)
 
     def _swallow(self, n, tmo):
         """K-line is half-duplex: everything WE transmit comes straight back at us."""
@@ -1305,7 +1285,7 @@ class KlineBSL:
             if not self._swallow(len(frame), tmo=2.0 + len(frame) * 12.0 / self.baud):
                 raise IOError("command frame was not echoed -- the monitor is not listening")
             what = "cmd %d @0x%06X" % (cmd, addr)
-            look = min(tmo, self.SLOW_LOOK if slow else STATUS_LOOK)
+            look = min(tmo, self.SLOW_LOOK if slow else current_session().status_look)
             st = self._read_status(look, what, required=False)
             if st is None:                          # a frame byte was swallowed
                 st = self._resync(what)
@@ -1342,7 +1322,7 @@ class KlineBSL:
                       % (cmd, addr))
         # Out of attempts at this rate.  Before giving up on the session, give up on the
         # SPEED: a rung down costs minutes, and the alternative costs the whole run.
-        lower = [] if getattr(self, "_sweeping", False) else \
+        lower = [] if getattr(self, "_sweeping", False) else\
             [b for b in getattr(self, "ladder", ()) if b < self.baud]
         if lower and self.mon_set_baud(lower[0]):
             if self.v:
@@ -1467,10 +1447,10 @@ class KlineBSL:
         try:
             d = self.mon_read(BRG_ADDR, 2)
         except IOError:
-            return BAUD_CONST
+            return current_session().baud_const
         pdiv = d[0] | (d[1] << 8)
         if not 1 <= pdiv <= 0x7FF:              # not a plausible divider -- keep the default
-            return BAUD_CONST
+            return current_session().baud_const
         const = float(self.baud) * (pdiv + 1)
         # The divider is an INTEGER, so this constant is quantised by however far the ROM's
         # measurement of our 9600 had to be rounded: one count here is 1/(pdiv+1), about
@@ -1480,8 +1460,8 @@ class KlineBSL:
         self.const_candidates = [float(self.baud) * (pdiv + 1 + d) for d in (0, -1, +1)]
         if self.v:
             print("[kline] rate constant from this ECU: %d x %d = %.0f (default %.0f)"
-                  % (self.baud, pdiv + 1, const, BAUD_CONST))
-        globals()["BAUD_CONST"] = const
+                  % (self.baud, pdiv + 1, const, current_session().baud_const))
+        current_session().baud_const = const
         return const
 
     def mon_set_baud(self, baud):
@@ -1551,7 +1531,7 @@ class KlineBSL:
         The small offsets after them cover the adapter's own divider quantisation, which is
         a different and much smaller error."""
         rates = []
-        for const in getattr(self, "const_candidates", None) or [BAUD_CONST]:
+        for const in getattr(self, "const_candidates", None) or [current_session().baud_const]:
             rates.append(round(const / (pdiv + 1)))
         for r in list(rates):
             for parts in (-3, +3):
@@ -1846,10 +1826,10 @@ def load_reference():
     run with no reference set, which is the default.  "No silent skips" applies to the
     diagnostics as much as to the flash.  No reference configured is not an error and says
     nothing; a reference configured and unreadable is worth one line."""
-    if not REF_BIN:
+    if not current_session().reference:
         return None
     try:
-        return open(REF_BIN, "rb").read()
+        return open(current_session().reference, "rb").read()
     except Exception as e:
         print("[kline]   (reference dump set but unreadable, so no comparison: %s)" % e)
         return None
@@ -1870,7 +1850,7 @@ def compare_report(data, label="dump"):
     # and is not this tool's to refuse.
     rom_checksum_report(data, label)
     agreed = True
-    for name, path in (("reference dump", REF_BIN),):
+    for name, path in (("reference dump", current_session().reference),):
         if not path:
             # Not an error, and it must not look like one: no reference is the DEFAULT.
             # Printing an errno for an empty filename reads as a malfunction and invites
@@ -2014,12 +1994,12 @@ def monitor_selftest(k):
         print("[kline] READ 0x%06X: %s%s" % (addr, data[:16].hex(" "), note))
     # No reference is the normal case, not an error: a dump is one vehicle's data and none
     # is shipped.  Saying so plainly beats reporting an errno for a filename nobody set.
-    if not REF_BIN:
+    if not current_session().reference:
         print("[kline] reset vector %s (no --reference set, so nothing to compare it with)"
               % k.mon_read(FLASH_BASE, 4).hex(" "))
     else:
         try:                                    # the boot vector is a known constant
-            ref = open(REF_BIN, "rb").read(4)
+            ref = open(current_session().reference, "rb").read(4)
             head = k.mon_read(FLASH_BASE, 4)
             if head == ref:
                 print("[kline] *** MONITOR READ CONFIRMED (reset vector %s matches the "
@@ -2175,7 +2155,7 @@ def calibrate_link(k, rounds=16, quiet=False):
         recover than any fixed guess.  This docstring used to add that an over-long
         timeout "manufactures idle line time, and after ~1 s idle this hardware drops a
         byte from the next transfer".  That is RETRACTED -- measured twenty frames per
-        condition, silence cost nothing (QUIRKS section 5, and the STATUS_LOOK comment at
+        condition, silence cost nothing (QUIRKS section 5, and the Session.status_look comment at
         the top of this file).  A short timeout is still right; the reason is simply that
         it recovers a genuine stall sooner.
       * how lossy the link is -> how many retries to allow.
@@ -2232,7 +2212,7 @@ def calibrate_link(k, rounds=16, quiet=False):
     nbytes = len(k.wire_frame(CMD_PING, 0, 0))
     per_byte = 1.0 - (1.0 - frame_err) ** (1.0 / nbytes) if frame_err < 1 else 1.0
     retries = 6 if frame_err < 0.02 else (12 if frame_err < 0.15 else 20)
-    globals()["STATUS_LOOK"] = look
+    current_session().status_look = look
     event("stage", stage="calibrated", baud=k.baud, frame_err=round(frame_err, 4),
           per_byte=per_byte, retries=retries, look_ms=int(look * 1000))
     if not quiet:
@@ -2470,9 +2450,9 @@ def link_test(k, rounds=150):
         k._tx(frame)
         if not k._swallow(len(frame), tmo=2.0 + len(frame) * 12.0 / k.baud):
             raise IOError("link test: the frame was not even echoed -- check the adapter")
-        # A generous window ON PURPOSE, not the operational STATUS_LOOK: this must measure
+        # A generous window ON PURPOSE, not the operational Session.status_look: this must measure
         # the LINE, not how quickly the host gives up.  Learned the hard way -- shortening
-        # STATUS_LOOK for speed moved this same bench from "12% of frames" to "47%" with
+        # Session.status_look for speed moved this same bench from "12% of frames" to "47%" with
         # no change to the hardware or the stage, which made two runs look like a
         # regression when nothing had regressed.
         st = k._read_status(2.0, "linktest", required=False)
@@ -2490,7 +2470,7 @@ def link_test(k, rounds=150):
 
     n = 8192
     ref = None
-    if not REF_BIN:
+    if not current_session().reference:
         # Not an error and it must not read as one: no reference is the DEFAULT, and
         # printing an errno for an empty filename sends people hunting for a file this
         # project deliberately does not ship.
@@ -2498,7 +2478,7 @@ def link_test(k, rounds=150):
         print("[kline]    measured -- pass --reference or set OPENM74_REFERENCE)")
     else:
         try:
-            ref = open(REF_BIN, "rb").read()[:n]
+            ref = open(current_session().reference, "rb").read()[:n]
         except Exception as e:
             print("[kline]   (the reference dump could not be read, so the ECU->host "
                   "direction is not measured: %s)" % e)
@@ -2800,16 +2780,13 @@ def final_verify(k, addr, data):
 # Deliberately not a way to stop mid-sector.  There is no safe point inside one: an erase
 # that has begun must be allowed to finish and the pages after it must be programmed, or
 # the sector is left blank with the old contents gone.
-_STOP = None
 
 
 def sector_seconds(baud, reliable=True, resume=False):
     """How long one sector takes at this rate -- the same arithmetic write_region uses.
 
-    Public because a front end needs it to decide how long to WAIT for a cooperative stop.
-    Hard-coding a timeout there is how the GUI ended up allowing eight seconds, which is
-    fine at 115200 and expires mid-sector at 19200 and 9600 -- the two rates the ladder
-    steps down to on exactly the sort of link where someone reaches for the close button."""
+    An estimate for progress reporting, never permission to kill a worker. A slow
+    sector must finish even when it exceeds this estimate."""
     scale = 115200.0 / max(1, baud)
     rate = 610.0 * baud / BASE_BAUD
     return (ERASE_S + SECTOR_PROGRAM_S * scale
@@ -2857,18 +2834,16 @@ def stop_on_sigint(writing):
 
 
 def request_stop():
-    """Ask a running write to stop at the next sector boundary."""
-    global _STOP
-    _STOP = True
+    """Ask the operation in this context to stop at the next sector boundary."""
+    current_session().request_stop()
 
 
 def clear_stop():
-    global _STOP
-    _STOP = None
+    current_session().stop.clear()
 
 
 def stop_requested():
-    return bool(_STOP)
+    return current_session().stop.is_set()
 
 
 def write_region(k, addr, data, resume=False, blank_check_each=False, retries=8):
@@ -3367,34 +3342,32 @@ def exit_status(rv):
     return rv
 
 
-def main(argv=None, *, log=None, events=None):
-    """Run one session; argv excludes the executable name.
-
-    CLI defaults use the process streams. Front ends supply their own log and JSON
-    event streams. Hardware settings remain module-wide, so overlapping sessions are
-    rejected before either can change the active ECU's state.
-    """
+def main(argv=None, *, log=None, events=None, session=None):
+    """Run one operation with explicit output, settings and cancellation state."""
     if not _RUN_LOCK.acquire(blocking=False):
         raise RuntimeError("an openm74 session is already running")
-    saved = (STATUS_LOOK, SETTLE_S, BAUD_CONST, REF_BIN, _EVENT_OUT)
-    token = _LOG_OUT.set(log)
     try:
-        clear_stop()
-        for stream in (log if log is not None else sys.stdout,
-                       events if events is not None else sys.stderr):
-            try:
-                stream.reconfigure(line_buffering=True)
-            except (AttributeError, OSError, ValueError):
-                pass                    # queues and test streams need no reconfiguration
-        return exit_status(_main(argv, log=log, events=events))
+        state = session if session is not None else Session(log=log, events=events)
+        if state.started:
+            raise RuntimeError("create a fresh Session for each operation")
+        state.started = True
+        if log is not None:
+            state.log = log
+        if events is not None:
+            state.events = events
+        with state.activate():
+            for stream in (state.log if state.log is not None else sys.stdout,
+                           state.events if state.events is not None else sys.stderr):
+                try:
+                    stream.reconfigure(line_buffering=True)
+                except (AttributeError, OSError, ValueError):
+                    pass                # queues and test streams need no reconfiguration
+            return exit_status(_main(argv))
     finally:
-        (globals()["STATUS_LOOK"], globals()["SETTLE_S"], globals()["BAUD_CONST"],
-         globals()["REF_BIN"], globals()["_EVENT_OUT"]) = saved
-        _LOG_OUT.reset(token)
         _RUN_LOCK.release()
 
 
-def _main(argv=None, *, log=None, events=None):
+def _main(argv=None):
     ap = SessionParser(description="XC2765X K-line BSL host (cross-platform)")
     ap.add_argument("--port", default=None, help="serial device (auto-detect FTDI if omitted)")
     ap.add_argument("--mode", choices=("reliable", "fast"), default="reliable",
@@ -3507,20 +3480,25 @@ def _main(argv=None, *, log=None, events=None):
                     help="diagnostic: can DISWDT disable the watchdog?")
     args = ap.parse_args(argv)
 
-    # JSON goes to its own sink; human output stays local to the calling context.
-    globals()["_EVENT_OUT"] = ((events if events is not None else sys.stdout)
-                              if args.progress == "json" else None)
-    _LOG_OUT.set(log if log is not None else
-                 sys.stderr if args.progress == "json" else sys.stdout)
+    state = current_session()
+    if args.progress == "json":
+        if state.events is None:
+            state.events = sys.stdout
+        if state.log is None:
+            state.log = sys.stderr
+    else:
+        state.events = None
+        if state.log is None:
+            state.log = sys.stdout
 
     if args.reference:
-        globals()["REF_BIN"] = args.reference
+        state.reference = args.reference
 
     if args.baud is None:                  # the mode picks the line rate, not the user
         args.baud = MODES[args.mode]["baud"]
 
     if args.settle is not None:
-        globals()["SETTLE_S"] = args.settle / 1000.0
+        state.settle = args.settle / 1000.0
 
     if args.verify:                                    # no serial port needed
         # The exit status matters most on THIS path: --verify exists to be a gate in
@@ -3742,7 +3720,7 @@ def _main(argv=None, *, log=None, events=None):
                 # `openm74 --oneshot --out backup.bin && openm74 --flash new.bin --yes`
                 # would write over an ECU whose only backup was a truncated file.
                 return len(body) >= want
-        elif args.monitor or args.mon_read is not None or args.write_selftest is not None \
+        elif args.monitor or args.mon_read is not None or args.write_selftest is not None\
                 or args.write or args.linktest or args.flash:
             delay = pacing_delay(args.baud)
             default_out = ap.get_default("out")
@@ -3863,7 +3841,7 @@ def _main(argv=None, *, log=None, events=None):
             try:
                 ok = run_monitor(k, args, payload, default_out)
                 print("[kline] link quality: %d retry/resync event(s) this session "
-                      "(settle %d ms)" % (k.retries_used, int(SETTLE_S * 1000)))
+                      "(settle %d ms)" % (k.retries_used, int(current_session().settle * 1000)))
                 if ok is False:
                     return 1
             except IOError as e:
