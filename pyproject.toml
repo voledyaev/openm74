@@ -43,11 +43,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/openm74"]
 
-[tool.hatch.build.targets.wheel.force-include]
-# The assembled stages travel with the package so the bytes the tool is about to push
-# into an ECU can be checked against the assembler's own output without a toolchain.
-"src/openm74/stages" = "openm74/stages"
-
 # NO [tool.uv] python-preference, and no .python-version, deliberately -- because the
 # obvious tidy-up here does not work and the measurement is worth more than the tidiness.
 #

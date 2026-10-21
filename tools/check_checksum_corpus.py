@@ -3,8 +3,8 @@
 
 BUILD-TIME tool -- not part of the flasher.  The numbers the README gives for the checksum
 ("routine found in 119 of 120", "equals AvtoVAZ's published checksum in 105 of the 109 it
-lists", "11 factory versions ship with P0601 masked off") come from this run, and the corpus they come
-from is not in this repository: 120 firmware files are not ours to redistribute.  Point it
+lists", "11 factory versions ship with P0601 masked off") come from this run. The corpus
+is not in this repository: 120 firmware files are not ours to redistribute.  Point it
 at a directory of .bin files, with an inventory.csv beside them that carries the published
 checksum per file.  Without one this script says so and exits 0.
 
@@ -18,7 +18,7 @@ import csv, glob, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "src"))
-from openm74 import checksum as C  # noqa: E402
+from openm74 import checksum as C
 
 DEFAULT = os.environ.get("OPENM74_CORPUS", "")
 

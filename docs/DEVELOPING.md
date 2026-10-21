@@ -77,6 +77,23 @@ could be reported for a later one that failed. A flasher that can say "done, ver
 about a write that did not finish has no business shipping. Group [18] of the fake-ECU tests
 holds the contract in place.
 
+## Calling from Python
+
+`klinebsl.main(argv=None, *, log=None, events=None)` accepts arguments without the
+executable name and returns a process exit status. Pass text streams as `log` and `events`
+to receive human output and, with `--progress json`, JSON events. The GUI uses this API
+without replacing process-wide streams or arguments. Argument parsing may raise `SystemExit`.
+
+Only one session may run per process: overlapping calls raise `RuntimeError` before changing
+hardware settings. Call `request_stop()` to request a stop at a sector boundary. Multi-ECU
+operation requires separate processes until hardware settings and cancellation are held in
+per-session state.
+
+Build and check the Python distribution with `uv build`, then
+`uv run python tools/check_package.py`. The latter installs the wheel outside the checkout
+and checks imports, the entry point and packaged resources. Regression checks for session
+output and failure cleanup are in `tests/test_session.py`.
+
 ## Building the application
 
 One script, whichever platform you are on — a second builder is how the platform nobody

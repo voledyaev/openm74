@@ -1233,10 +1233,9 @@ class App:
     def worker(self, argv):
         """Run the CLI's own main() so the button cannot drift from the terminal.
 
-        TWO pipes, not one: with --progress json the tool puts machine events on stdout and
-        the human log on stderr, and the whole point is that this front end reads the events
-        instead of the prose.  Merging the streams here would throw that distinction away
-        and put us straight back to regexing sentences."""
+        Separate queue-backed streams carry JSON events and the human log. They are
+        passed directly to the engine, so unrelated threads keep their own process streams.
+        This front end reads events instead of parsing prose."""
         class Pipe(io.TextIOBase):
             def __init__(self, q, tag):
                 self.q, self.tag = q, tag
@@ -1249,18 +1248,15 @@ class App:
             def flush(self):
                 pass
 
-        old_out, old_err, old_argv = sys.stdout, sys.stderr, sys.argv
-        sys.stdout = Pipe(self.q, "event")
-        sys.stderr = Pipe(self.q, "log")
         code = 0
         try:
-            sys.argv = argv
             # main() RETURNS the status; it does not raise.  Dropping the return value left
             # `code` at 0 for every failure signalled that way -- which is most of them --
             # so the `died` guard below, whose comment says a nonzero status is a failure
             # whatever the events said, could never fire.  exit_status() is the same
             # normaliser the console entry point uses, so the button and the terminal agree.
-            code = K.exit_status(K.main())
+            code = K.main(argv[1:], log=Pipe(self.q, "log"),
+                          events=Pipe(self.q, "event"))
         except SystemExit as e:
             code = e.code if isinstance(e.code, int) else 1
             if isinstance(e.code, str):
@@ -1269,7 +1265,6 @@ class App:
             code = 1
             self.q.put(("log", t("dl.error", e)))
         finally:
-            sys.stdout, sys.stderr, sys.argv = old_out, old_err, old_argv
             self.q.put(("done", code))
 
     def drain(self):

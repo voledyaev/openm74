@@ -44,7 +44,8 @@ and reconstructing five.
 | Path | What lives there |
 |---|---|
 | `src/openm74/klinebsl.py` | the engine and the CLI: transport, the monitor's command protocol, flash operations, the event stream. One module, ~3500 lines, deliberately not split — every hardware-proven behaviour is in it and the seams (transport / monitor / flash / CLI) are worth naming before cutting, not after |
-| `src/openm74/gui.py` | the Tk interface. Drives the engine through the same code path the CLI does, so a button cannot drift from a terminal |
+| `src/openm74/checksum.py` | ROM checksum discovery and calculation, stored-field comparison and P0601 monitor-mask detection |
+| `src/openm74/gui.py` | the Tk interface. Drives the engine through the same session entry point the CLI does, so a button cannot drift from a terminal |
 | `src/openm74/i18n.py` | the string catalogue, ru and en. The interface is translated; the engine's log is not, on purpose — see the file's own header |
 | `stages/*.asm` | everything that runs on the ECU |
 | `tools/` | build, checks and bench probes. Not shipped to users |
@@ -57,9 +58,13 @@ and reconstructing five.
 uv run python tests/test_monitor_offline.py     # blob vs assembler, patch sites, gate, framing
 uv run python tests/test_monitor_fakeecu.py     # end-to-end against a simulated ECU
 uv run python tests/test_checksum.py            # ROM checksum arithmetic, reserved sector
+uv run python tests/test_session.py             # failures, session I/O, signal cleanup
+uv build                                       # sdist and wheel
+uv run python tools/check_package.py            # isolated wheel install and resources
 uv run python tools/check_checksum_corpus.py    # checksum + P0601 mask on 120 factory images; skips cleanly without them
 uv run python tools/check_gui_platform.py       # this platform's GUI assumptions
 uv run python tools/build_stages.py             # needs a C166 assembler; skips cleanly without
+uv run --with ruff ruff check .                 # correctness lint; no automatic formatter
 uv run python tools/check_docs_parity.py       # English vs Russian docs: numbers, addresses, links
 ```
 
@@ -156,3 +161,110 @@ it.
 * Trusting the known address of the reserved sector instead of measuring it. The name is
   a label on a measurement; a tool that skips a sector because a constant says so will
   skip a real failure just as happily.
+
+
+## Handoff context and working rules
+
+This file is the repository's persistent instruction and handoff entry point. Keep it
+current when project decisions change. Talk to the user in Russian; retain the existing
+language of source files and documentation. Preserve hand-laid-out comments: there is no
+automatic formatter; Ruff configuration in `pyproject.toml` is intentional.
+
+The user wants to develop this project into professional software for auto repair shops.
+That is a product direction, not an approved implementation plan. The current implementation
+is a K-line ROM-BSL tool; soldering a missing L9637D onto a board is a DIY bench workaround,
+not a factory or service-shop workflow. Firmware-level CAN reprogramming and an external
+adapter for boards without that transceiver remain questions, not verified capabilities.
+Distinguish the ROM loader from any application-level programming service; do not promise
+read/write support from a plausible protocol explanation alone.
+
+Re-derive numerical claims from other agents or previous sessions before repeating them.
+A matching symptom is not proof of a cause. State the host, sample count and measurement
+method when making hardware claims; evidence from one ECU does not establish factory-wide
+behaviour. Existing current-state documentation takes precedence over superseded session
+notes. Do not restore private source links, sibling-project names or vendor-forum references
+previously removed from this public repository, including in this file or commit messages.
+Do not commit raw session logs or private memory files.
+
+### Transport and the shared bench
+
+The bench moves between this Mac and a separate physical Windows PC, using the same adapter
+and ECU. When reviewing a copied checkout, inspect its diff; Windows can change executable
+bits without changing file content. Record which host produced a measurement.
+
+`SteadyPort` exists because assigning the underlying pyserial port's `timeout` between a
+write and its reply reconfigures the adapter on Windows. Never restore per-read/per-retry
+assignments on the underlying port. Wrapper timeout assignments are virtual and intentional.
+Before attributing corruption to K-line physics, compare the same bench on a second OS.
+
+On this Mac's bench, the FTDI adapter has sometimes accepted open/read of port attributes
+but rejected setting those same attributes with `EINVAL` after prolonged use. A device node
+or a successful `stty` read does not prove it is healthy. The user's recovery is to remove
+both USB power and bench-supply power, then reconnect; USB removal alone can leave it
+part-powered. Any port-setting diagnostic still requires the explicit serial-port
+authorization above. Check the adapter before spending a requested ECU power cycle.
+
+The bench reference image is `I444GI04.bin`, 851968 bytes, SHA256
+`36c7797441c5e64d23becdf54c323c8ee1e05daed5dfd2438fe231f11a93c91c`.
+Its former Downloads copy was reported removed; do not assume it is present. Verify any
+replacement against the hash. A dump from the repeatedly reflashed bench ECU is current
+state, not a factory baseline. On the measured unit, the 4096-byte sector at `0xC0F000`
+is reserved; a full reference write matched the other 847872 bytes. Continue detecting
+unmapped regions from the device's responses rather than skipping this address by constant.
+Firmware images, backups and partial dumps remain excluded from version control.
+
+### ROM checksum constraints
+
+The flasher reports checksums; it does not repair or rewrite the supplied image. A partial
+write must check the backup with the payload overlaid; `--flash` must account for the ECU's
+preserved boot sector. Short images must produce a "not checked" result, not an exception
+that hides the short-read report. Keep checksum verdicts in the existing stage/problem
+event stream and translate their GUI rendering through `i18n.py`.
+
+A stale checksum does not by itself prove P0601 will be reported: distinguish monitor
+enabled, masked off and unknown. The delayed fault was observed once on one car; the
+masked-off interpretation comes from disassembly. Keep those limits next to the claims.
+
+Run `tools/check_checksum_corpus.py DIR` or set `OPENM74_CORPUS` when an external corpus
+is available. Without one, report the check as skipped. The documented sample is 120 images,
+119 discovered routines and 105 matches against 109 published checksum entries. Treat
+reserved-sector bytes as the chip's measured `9b 1e`, not the file's zeros; that distinction
+can make another implementation's totals differ without either calculation being wrong.
+The corpus and the algorithm's original research are external; obtain their location from
+local context or the user without adding private provenance to this repository.
+
+### Known follow-up work
+
+* Screenshots still show an older menu and reading status. Retake them after GUI changes;
+  the in-progress reading/writing shots require an authorized real bench session.
+* The `SWRSTCON` experiment remains unperformed and requires a monitor register-write
+  command. Do not describe software re-entry to BSL as working.
+* The XC2768X layout discriminator assumes the same unmapped word at `0xCC0000` and
+  `0xCD0000`; that has not been measured on such a part. See `docs/FINDINGS.md`.
+* The checkout declares version `1.0.1`. Check tags and source differences when discussing
+  release contents; changes on the branch do not automatically appear in release binaries.
+  Release checksums must use LF on every platform so `sha256sum -c` works across hosts.
+
+Do not push, publish, rewrite history or run ECU operations merely to validate an ordinary
+source/documentation change; those actions need authorization covering that operation.
+
+## Private continuity context
+
+Read `~/.codex/project-context/openm74/INDEX.md` when earlier decisions or investigation details are
+needed. This local context is private and must not be copied into this repository.
+Current source and explicit later user decisions take precedence over historical
+notes. Old task requests and approvals are not pending instructions. Keep this
+file current with durable decisions. Communicate with the user in Russian.
+Do not append automatic AI coauthor or generator signatures to commit messages.
+
+
+## Session API
+
+`klinebsl.main(argv=None, *, log=None, events=None)` accepts arguments without the
+executable name and optional text streams. The GUI supplies queue-backed streams;
+never replace process-wide `sys.argv`, `sys.stdout` or `sys.stderr` from its worker.
+Human output is routed through the engine's context-local print wrapper; JSON events
+use the supplied event stream when `--progress json` is selected. Hardware settings
+remain module-wide: a second concurrent session is explicitly rejected before state
+changes. A future multi-ECU API must move those settings and cancellation into per-session
+state before removing that guard.

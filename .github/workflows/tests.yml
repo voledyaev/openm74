@@ -32,6 +32,10 @@ jobs:
           uv python install 3.14
           echo "UV_PYTHON=3.14" >> "$GITHUB_ENV"
       - run: uv sync
+      - run: uv run --with ruff ruff check .
+      - run: uv build
+      - run: uv run python tools/check_package.py
+      - run: uv run python tests/test_session.py
       - name: blob vs assembler, patch sites, gate, framing
         run: uv run python tests/test_monitor_offline.py
       - name: end-to-end against a simulated ECU

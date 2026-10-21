@@ -31,6 +31,27 @@ Erased flash on this part reads back as 0x00, not 0xFF.
 Power-cycle the ECU (A4/B2 asserted) before each run so the BSL is freshly armed.
 """
 import sys, os, time, argparse, json
+import builtins
+import threading
+from contextvars import ContextVar
+
+
+# The GUI runs the engine on a worker. Routing this module's log must never replace
+# process-wide streams: Tk callbacks and unrelated threads still own their own output.
+_LOG_OUT = ContextVar("openm74_log", default=None)
+_RUN_LOCK = threading.Lock()
+
+
+def print(*args, **kwargs):
+    if "file" not in kwargs:
+        kwargs["file"] = _LOG_OUT.get() or sys.stdout
+    builtins.print(*args, **kwargs)
+
+
+class SessionParser(argparse.ArgumentParser):
+    def _print_message(self, message, file=None):
+        if message:
+            (_LOG_OUT.get() or file or sys.stderr).write(message)
 
 try:
     import serial
@@ -607,7 +628,7 @@ def check_identity(k, force=False):
 #   result    the outcome of a phase that can pass or fail: read, write, verify.
 #             THE VERDICT RULE: an operation succeeded iff at least one result arrived and
 #             none of them said ok=false.  Absence of results is not success.
-_EVENT_OUT = None       # the real stdout, kept aside once the human log moves to stderr
+_EVENT_OUT = None       # JSON sink for the active session, separate from its human log
 
 
 def event(kind, /, **fields):
@@ -1837,12 +1858,11 @@ def load_reference():
 def compare_report(data, label="dump"):
     """Print how `data` lines up with the reference dump of this ECU, and say whether it did.
 
-    Returns True when there is nothing to disagree with -- no reference set, or every
-    compared byte matched -- and False when a reference was read and bytes differed.  The
+    Returns True when no reference is requested or a nonempty reference matches.
+    An unreadable reference, empty pair or differing bytes returns False.  The
     return value is what --verify hands the shell, so a script can use it as a gate."""
     import hashlib
 
-    from . import checksum
     print("[kline] %s: %d bytes  sha256=%s" % (label, len(data),
           hashlib.sha256(data).hexdigest().upper()))
     # ROM checksum self-consistency, for every file this looks at.  A statement about
@@ -1859,10 +1879,17 @@ def compare_report(data, label="dump"):
                   % name)
             continue
         try:
-            ref = open(path, "rb").read()
-        except Exception as e:
-            print("[kline]   vs %-14s skipped (%s)" % (name, e)); continue
+            with open(path, "rb") as f:
+                ref = f.read()
+        except OSError as e:
+            print("[kline]   vs %-14s FAILED (%s)" % (name, e))
+            agreed = False
+            continue
         n = min(len(data), len(ref))
+        if not data and not ref:
+            print("[kline]   both files are EMPTY -- no image was verified")
+            agreed = False
+            continue
         # The length check comes FIRST.  `if not n: continue` used to run ahead of it, so a
         # zero-byte file -- a full disk, a cancelled copy, a stray `> backup.bin` -- printed
         # no comparison at all and exited 0, while a merely short one exited 1.  The empty
@@ -3340,47 +3367,35 @@ def exit_status(rv):
     return rv
 
 
-def main():
-    """Entry point.  Exists to guarantee the --progress stream swap is always undone.
+def main(argv=None, *, log=None, events=None):
+    """Run one session; argv excludes the executable name.
 
-    _main() moves the human log onto stderr so stdout can carry nothing but events.  That
-    is a mutation of module-global state, and main() gets called more than once per process
-    (the GUI runs it per button press, the tests run it per case).  Left unrestored, the
-    SECOND call would read an already-swapped sys.stdout and quietly point the event stream
-    at the log -- every event would vanish into the text nobody is parsing, which is the
-    exact failure this contract exists to prevent."""
-    # The return value IS the process exit status -- the console entry point is
-    # `sys.exit(main())`.  It used to be 0 for every failure, so `openm74 --flash img --yes
-    # && echo ok` printed ok over an ECU that had just been left unwritten.
-    # A stop asked for during the LAST run must not kill this one.  The GUI calls main()
-    # once per button press in the same process, so this flag has to start clean.
-    clear_stop()
-    saved = (sys.stdout, STATUS_LOOK, SETTLE_S, BAUD_CONST, REF_BIN)
-    # Line-buffer the log, always.  Python switches stdout to BLOCK buffering the moment it
-    # is not a terminal, so `openm74 --flash img.bin --yes | tee run.log` -- or any front end
-    # reading the pipe -- shows nothing at all for as long as the job takes, and shows
-    # nothing whatsoever if the run is then interrupted.  Found the hard way: a bench write
-    # was started with its output redirected, produced an EMPTY file, and killing it lost the
-    # lot.  A progress log that only arrives after the thing it reported on is not one.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(line_buffering=True)
-        except Exception:
-            pass                        # a stream that cannot be reconfigured still works
+    CLI defaults use the process streams. Front ends supply their own log and JSON
+    event streams. Hardware settings remain module-wide, so overlapping sessions are
+    rejected before either can change the active ECU's state.
+    """
+    if not _RUN_LOCK.acquire(blocking=False):
+        raise RuntimeError("an openm74 session is already running")
+    saved = (STATUS_LOOK, SETTLE_S, BAUD_CONST, REF_BIN, _EVENT_OUT)
+    token = _LOG_OUT.set(log)
     try:
-        return exit_status(_main())
+        clear_stop()
+        for stream in (log if log is not None else sys.stdout,
+                       events if events is not None else sys.stderr):
+            try:
+                stream.reconfigure(line_buffering=True)
+            except (AttributeError, OSError, ValueError):
+                pass                    # queues and test streams need no reconfiguration
+        return exit_status(_main(argv, log=log, events=events))
     finally:
-        # ALL of the mutated globals, not just the stream.  BAUD_CONST is the dangerous one:
-        # learn_baud_const() rewrites it from the ECU in front of us, and a second ECU whose
-        # own read fails would otherwise inherit the first one's clock -- sending every
-        # subsequent rate change to the wrong divider.  The GUI runs main() per button press.
-        (sys.stdout, globals()["STATUS_LOOK"], globals()["SETTLE_S"],
-         globals()["BAUD_CONST"], globals()["REF_BIN"]) = saved
-        globals()["_EVENT_OUT"] = None
+        (globals()["STATUS_LOOK"], globals()["SETTLE_S"], globals()["BAUD_CONST"],
+         globals()["REF_BIN"], globals()["_EVENT_OUT"]) = saved
+        _LOG_OUT.reset(token)
+        _RUN_LOCK.release()
 
 
-def _main():
-    ap = argparse.ArgumentParser(description="XC2765X K-line BSL host (cross-platform)")
+def _main(argv=None, *, log=None, events=None):
+    ap = SessionParser(description="XC2765X K-line BSL host (cross-platform)")
     ap.add_argument("--port", default=None, help="serial device (auto-detect FTDI if omitted)")
     ap.add_argument("--mode", choices=("reliable", "fast"), default="reliable",
                     help="reliable (default): pre-flight backup, blank-check "
@@ -3490,17 +3505,13 @@ def _main():
                     help="diagnostic: does the RBUF read return the correct byte?")
     ap.add_argument("--diswdt", action="store_true",
                     help="diagnostic: can DISWDT disable the watchdog?")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
-    # Done before anything prints.  One swap moves every existing print() onto the log
-    # stream and keeps the real stdout for events, so no call site has to know about this.
-    #
-    # Assigned unconditionally, including the None: main() can be called more than once in
-    # one process (the GUI does exactly that, and so do the tests), and a stale _EVENT_OUT
-    # from a previous run would keep writing events into a stream nobody is reading.
-    globals()["_EVENT_OUT"] = sys.stdout if args.progress == "json" else None
-    if args.progress == "json":
-        sys.stdout = sys.stderr
+    # JSON goes to its own sink; human output stays local to the calling context.
+    globals()["_EVENT_OUT"] = ((events if events is not None else sys.stdout)
+                              if args.progress == "json" else None)
+    _LOG_OUT.set(log if log is not None else
+                 sys.stderr if args.progress == "json" else sys.stdout)
 
     if args.reference:
         globals()["REF_BIN"] = args.reference
@@ -3514,8 +3525,9 @@ def _main():
     if args.verify:                                    # no serial port needed
         # The exit status matters most on THIS path: --verify exists to be a gate in
         # somebody's script, and a gate that exits 0 whatever it finds is not a gate.
-        return compare_report(open(args.verify, "rb").read(),
-                              os.path.basename(args.verify))
+        with open(args.verify, "rb") as f:
+            data = f.read()
+        return compare_report(data, os.path.basename(args.verify))
 
     if args.stitch:                                    # no serial port needed
         d = os.path.dirname(os.path.abspath(args.out))
@@ -3572,23 +3584,23 @@ def _main():
     prev_sigint = stop_on_sigint(bool(args.write or args.flash
                                       or args.write_selftest is not None))
     try:
-        k.open()
-    except IOError as e:
-        # open() raises with a diagnosis that took a bench session to write.  Letting it
-        # escape printed a stack trace ABOVE that diagnosis, which buries the one part the
-        # user can act on under fifteen lines they cannot.  Nothing has been sent to the
-        # ECU at this point -- the port never opened -- so there is nothing to report but
-        # the failure itself.
-        print("[kline] %s" % e)
-        # One sentence in the event, the three paragraphs of advice in the log.  str(e) here
-        # is a multi-line remedy complete with "[kline]" prefixes, and pouring that into a
-        # JSON `message` gives a front end something it can only print raw -- the opposite
-        # of why the event stream exists.
-        event("result", what="open", ok=False, port=port,
-              reason="port_unconfigurable",
-              message="the serial port opened but refuses every configuration")
-        return 1
-    try:
+        try:
+            k.open()
+        except IOError as e:
+            # open() raises with a diagnosis that took a bench session to write.  Letting it
+            # escape printed a stack trace ABOVE that diagnosis, which buries the one part the
+            # user can act on under fifteen lines they cannot.  Nothing has been sent to the
+            # ECU at this point -- the port never opened -- so there is nothing to report but
+            # the failure itself.
+            print("[kline] %s" % e)
+            # One sentence in the event, the three paragraphs of advice in the log.  str(e) here
+            # is a multi-line remedy complete with "[kline]" prefixes, and pouring that into a
+            # JSON `message` gives a front end something it can only print raw -- the opposite
+            # of why the event stream exists.
+            event("result", what="open", ok=False, port=port,
+                  reason="port_unconfigurable",
+                  message="the serial port opened but refuses every configuration")
+            return 1
         # Before the handshake, because the point of it is to give the ROM loader the
         # power-on reset it insists on -- and the autobaud then measures our first byte.
         if args.power_line != "none":
@@ -4026,13 +4038,15 @@ def _main():
                        "interrupted by the operator; this operation writes nothing"))
         return 1
     finally:
-        k.close()
-        if prev_sigint is not None:
-            import signal
-            try:
-                signal.signal(signal.SIGINT, prev_sigint)
-            except (ValueError, OSError):
-                pass        # same reasons stop_on_sigint may decline to install one
+        try:
+            k.close()
+        finally:
+            if prev_sigint is not None:
+                import signal
+                try:
+                    signal.signal(signal.SIGINT, prev_sigint)
+                except (ValueError, OSError):
+                    pass    # same reasons stop_on_sigint may decline to install one
 
 
 if __name__ == "__main__":

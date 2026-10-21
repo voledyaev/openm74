@@ -896,9 +896,8 @@ def run_json(argv, image=REF):
     FakeSerial.ecu = ecu
     K.serial.Serial = FakeSerial
     old_out, old_err, old_argv = sys.stdout, sys.stderr, sys.argv
-    # Held by name, not read back off sys.*: the tool deliberately points sys.stdout at the
-    # log stream while json progress is on, so `sys.stdout.getvalue()` afterwards would hand
-    # back the human log and the events would look empty.
+    # CLI defaults route JSON to stdout and human output to stderr. Keep both captures
+    # separate so a human line leaking into the event stream fails JSON decoding.
     out_s, err_s = io.StringIO(), io.StringIO()
     sys.stdout, sys.stderr = out_s, err_s
     code = 0

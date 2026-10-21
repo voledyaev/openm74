@@ -186,9 +186,7 @@ def check_signature(app):
     print("\nsignature:")
     rc = subprocess.call(["codesign", "--verify", "--deep", "--strict", app])
     if rc:
-        print("  WARNING: codesign --verify failed (%d) -- the bundle may not launch on "
-              "Apple Silicon" % rc)
-        return
+        sys.exit("codesign --verify failed (%d); refusing to package an invalid bundle" % rc)
     out = subprocess.run(["codesign", "-dvv", app], capture_output=True, text=True).stderr
     authority = [l.strip() for l in out.splitlines() if l.startswith("Authority=")]
     print("  intact; %s" % (", ".join(authority) if authority
