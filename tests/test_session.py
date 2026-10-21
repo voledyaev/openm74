@@ -179,6 +179,7 @@ class VerdictTests(unittest.TestCase):
                 app = App.__new__(App)
                 app.results = []
                 app.read_btn, app.write_btn = Mock(), Mock()
+                app._input_controls = [app.read_btn, app.write_btn]
                 app.last_was_write = False
                 app.resume = Mock()
                 app.resume.get.return_value = False

@@ -7,6 +7,9 @@ over K-line, on the bench. Cross-platform, no vendor DLLs, no dongle, MIT licens
 
 ![The main window on Windows](docs/img/screenshot-main-en.png)
 
+The screenshots show the released v1.0.1 interface. The current source uses a workspace: choose
+Read or Write, then start with the action button; the log opens in a separate window.
+
 ---
 
 ## What it does

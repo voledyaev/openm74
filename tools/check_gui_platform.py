@@ -22,6 +22,7 @@ It opens a window briefly and closes it again.  Nothing is written and no ECU is
 import os
 import json
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "src"))
@@ -425,6 +426,36 @@ for lang in i18n.LANGS:
         leaked = [s for s in (a.status.get(), a.read_btn.cget("text"),
                               a.write_btn.cget("text")) if "." in s and " " not in s]
         check("%s: no untranslated key reached a widget" % lang, not leaked, repr(leaked))
+        # Selecting an operation must never start I/O. Only the separate action button
+        # may invoke the engine, and it must remain visible with the longer write form.
+        with patch.object(a, "do_write") as write, patch.object(a, "do_read") as read:
+            a.write_btn.invoke()
+            check("%s: selecting write only changes the form" % lang,
+                  a.operation.get() == "write" and not write.called and not read.called)
+            a.start_btn.invoke()
+            check("%s: the action button invokes the selected operation" % lang,
+                  write.call_count == 1 and not read.called)
+        w.deiconify()
+        w.update()
+        action_bottom = a.start_btn.winfo_rooty() + a.start_btn.winfo_height()
+        check("%s: the write action fits inside the window" % lang,
+              a.start_btn.winfo_ismapped() and action_bottom <= w.winfo_rooty() + w.winfo_height())
+        check("%s: the journal starts hidden" % lang, a._log_window.state() == "withdrawn")
+        a.say("workspace test\n")
+        a.show_log()
+        a._log_window.withdraw()
+        check("%s: closing the journal preserves its buffer" % lang,
+              "workspace test" in a.log.get("1.0", "end"))
+        a.path.set("/example/selected.bin")
+        a.mode.set("fast")
+        a.resume.set(True)
+        a.rebuild()
+        check("%s: rebuilding preserves the chosen operation and image" % lang,
+              a.operation.get() == "write" and a.path.get() == "/example/selected.bin"
+              and a.mode.get() == "fast" and a.resume.get())
+        a.read_btn.invoke()
+        check("%s: read hides the write settings" % lang,
+              a.operation.get() == "read" and not a.write_settings.winfo_manager())
         # The menu bar is the system's own on macOS, so it is worth confirming it exists and
         # carries the settings rather than assuming Tk attached it.
         try:
@@ -468,13 +499,9 @@ i18n.set_lang(was)
 
 print()
 print("[10] appearance is a round trip, not a one-way door")
-# X11 paints the same light grey chrome whatever the desktop is set to, so picking Dark
-# there gives a dark log pane bolted into a light grey window unless the program paints the
-# chrome itself.  Doing that has to be undoable within one session -- and the undo is what
-# broke first: the platform's own background was read lazily, so the FIRST thing ever to
-# read it was the revert, by which time the window was already dark and it "restored" our
-# own colour.  Both directions are checked, on every platform, because the answer differs
-# by platform and the wrong one is invisible until someone takes a screenshot.
+# Both palettes must repaint form controls and backgrounds completely; native menu
+# colours remain platform-specific. The original background is still recorded before
+# painting so platform detection never measures our own chosen palette.
 x11 = sys.platform not in ("win32", "darwin")
 tw = tk.Toplevel(root)
 tw.withdraw()
@@ -482,17 +509,17 @@ G.init_theme(tw, "dark")
 native = G._NATIVE_BG
 check("the platform's own background is remembered before anything is painted",
       bool(native), repr(native))
-check("dark: chrome is painted by us on X11 and by the platform elsewhere",
-      x11 == G.CHROME_THEMED, "CHROME_THEMED=%s on %s" % (G.CHROME_THEMED, sys.platform))
+check("dark: form controls share the workspace palette",
+      G.CHROME_THEMED, "CHROME_THEMED=%s on %s" % (G.CHROME_THEMED, sys.platform))
 G.init_theme(tw, "light")
-check("light: the native chrome is handed back", not G.CHROME_THEMED)
+check("light: form controls also use the light palette", G.CHROME_THEMED)
 check("and the window background with it",
-      tw.winfo_toplevel().cget("background") == native,
-      "%s vs %s" % (tw.winfo_toplevel().cget("background"), native))
+      tw.winfo_toplevel().cget("background") == G.THEME["surface_alt"],
+      "%s vs %s" % (tw.winfo_toplevel().cget("background"), G.THEME["surface_alt"]))
 check("menu colours follow the same rule",
       not G.menu_colors(), "light -> %s" % (G.menu_colors() or "{} (platform's own)"))
 G.init_theme(tw, "dark")
-check("and dark can be taken up again after that", x11 == G.CHROME_THEMED)
+check("and dark can be taken up again after that", G.CHROME_THEMED)
 check("menus are coloured on X11 dark only",
       bool(G.menu_colors()) == x11, "keys: %s" % sorted(G.menu_colors()))
 G.init_theme(tw, "light")

@@ -236,7 +236,7 @@ local context or the user without adding private provenance to this repository.
 
 ### Known follow-up work
 
-* Screenshots still show an older menu and reading status. Retake them after GUI changes;
+* README screenshots show released v1.0.1, predating the workspace layout. Retake on Windows;
   the in-progress reading/writing shots require an authorized real bench session.
 * The `SWRSTCON` experiment remains unperformed and requires a monitor register-write
   command. Do not describe software re-entry to BSL as working.
@@ -274,3 +274,14 @@ asynchronous: keep draining events until the engine closes its transport and the
 returns. Do not impose a deadline that kills a write between erase and program. A read is
 allowed to finish before closing. macOS builds use onedir bundles; Windows and Linux remain
 onefile executables.
+
+
+## Workspace interface
+
+The main window has a connection sidebar, Read/Write selection, operation-specific inputs
+and one action button. Selecting an operation must never start I/O. The journal is a separate
+window with a persistent Text buffer: hiding it must preserve the log and not affect a run.
+Disable the form during an operation. Language/theme rebuilds preserve selected operation,
+path, port, mode and resume choice; the dangerous ECU override still resets. Form controls
+use the built-in clam renderer to follow the selected palette on all platforms; title bars
+and native menus remain platform-owned. Keep the device identity label tied to the engine's identity event rather than adapter enumeration.

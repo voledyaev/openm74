@@ -374,26 +374,14 @@ _NATIVE_TTK = None          # the ttk theme the platform started with
 
 
 def style_chrome(widget):
-    """Paint the ttk chrome ourselves -- on X11 only, and only when the palettes disagree.
+    """Keep controls consistent with the workspace in either appearance.
 
-    Everywhere else this is deliberately not done: macOS and Windows paint their widgets to
-    match the system appearance, natively and better than we would, and a hand-coloured
-    button on those platforms looks like a port of somebody else's toolkit.
-
-    X11 is the one that cannot be left alone.  Its default ttk theme paints the same light
-    grey whatever the desktop is set to, so a user who picks Dark gets a dark log pane
-    bolted into a light grey window -- which is not "a theme we did not apply", it is a
-    window that looks broken, and it is what a Linux screenshot of this program showed.
-    The fix is 'clam', the one built-in ttk theme that honours the colours it is given.
-
-    Only for dark.  With the light palette the native chrome already agrees, and swapping
-    the theme engine would trade a correct native look for an approximation of it -- so this
-    also has to be able to switch BACK, because the theme can be changed inside one session
-    and clam holding dark colours under the light palette is worse than what it fixed."""
+    Native title bars and menus stay with the platform. The built-in clam renderer
+    lets form controls follow the selected palette, including light content on a dark
+    macOS desktop; native controls otherwise leave dark rectangles on the light panel.
+    """
     global CHROME_THEMED, _NATIVE_TTK
     CHROME_THEMED = False
-    if sys.platform in ("win32", "darwin"):
-        return
     T = THEME
     try:
         st = ttk.Style(widget)
@@ -407,7 +395,7 @@ def style_chrome(widget):
                          ("*TCombobox*Listbox.selectBackground", "sig"),
                          ("*TCombobox*Listbox.selectForeground", "on_chip")):
             widget.option_add(opt, T[key])
-        if THEME_NAME != "dark" or "clam" not in st.theme_names():
+        if "clam" not in st.theme_names():
             st.theme_use(_NATIVE_TTK)
             if native_bg(widget):
                 widget.winfo_toplevel().configure(background=native_bg(widget))
@@ -421,7 +409,17 @@ def style_chrome(widget):
                      darkcolor=T["surface_head"], focuscolor=T["sig"],
                      selectbackground=T["sig"], selectforeground=T["on_chip"],
                      insertcolor=T["ink"])
-        st.configure("TButton", background=T["surface_head"], padding=4)
+        st.configure("TButton", background=T["surface"], padding=(12, 8))
+        st.configure("Workspace.Primary.TButton", background=T["sig"],
+                     foreground=T["on_chip"], bordercolor=T["sig"], padding=(14, 10))
+        st.map("Workspace.Primary.TButton",
+               background=[("disabled", T["surface_alt"]), ("active", T["sig"])],
+               foreground=[("disabled", T["ink_faint"]), ("active", T["on_chip"])])
+        st.configure("Workspace.Toolbutton", background=T["surface"],
+                     foreground=T["ink"], padding=(14, 10))
+        st.map("Workspace.Toolbutton",
+               background=[("selected", T["sig"]), ("active", T["surface_head"])],
+               foreground=[("disabled", T["ink_faint"]), ("selected", T["on_chip"])])
         st.map("TButton",
                background=[("pressed", T["edge"]), ("active", T["rule"]),
                            ("disabled", T["surface_alt"])],
@@ -738,117 +736,167 @@ class App:
         self._evbuf = ""
         root.title(t("app.title"))
         self.set_window_icon(root)
-        root.geometry("%dx660" % layout()["width"])
-        root.minsize(760, 560)
+        root.geometry("1080x790")
+        root.minsize(1000, 760)
 
-        # Resolve the palette before building anything with it.  ttk's own chrome -- buttons,
-        # tabs, the progress bar -- is left to the platform, which draws it correctly and
-        # natively; what we theme is the CONTENT: the log, the help panes and the drawings.
         cfg = load_config()
-        # Type-checked, not just present: a config holding {"theme": 5} used to raise inside
-        # __init__, and in a windowed build that means the application simply never opens,
-        # with nothing on screen to explain why.
         prefer = cfg.get("theme")
         init_theme(root, prefer if isinstance(prefer, str) else None)
-        # Dimmed text sits on the CHROME, so its colour has to match whatever painted the
-        # chrome -- which is not always the palette above.  Taking it from THEME makes it
-        # dark-on-dark the moment the two disagree, which is exactly what forcing the light
-        # palette on a dark desktop does: the override changes what WE paint, and on macOS
-        # and Windows it cannot change what the platform paints.  On X11 it now can, so ask
-        # style_chrome whether it did rather than assuming either way.
-        self.soft = THEMES["dark" if (CHROME_THEMED or dark_theme(root))
-                           else "light"]["ink_soft"]
+        self.soft = THEME["ink_soft"]
 
         self.build_menu(root)
-
-        # say plainly which ECU this is for -- the pin coordinates in the help are
-        # worthless, and dangerous, if someone assumes they fit a different unit
-        head = ttk.Frame(root, padding=(10, 8, 10, 0))
-        head.pack(fill="x")
-        ttk.Label(head, text=t("app.device"), foreground=self.soft).pack(side="left")
-
-
-        top = ttk.Frame(root, padding=10)
-        top.pack(fill="x")
-        ttk.Label(top, text=t("ui.adapter")).grid(row=0, column=0, sticky="w")
+        self.operation = tk.StringVar(value="read")
         self.port = tk.StringVar()
-        self.port_box = ttk.Combobox(top, textvariable=self.port, width=44, state="readonly")
-        self.port_box.grid(row=0, column=1, sticky="w", padx=6)
-        ttk.Button(top, text=t("ui.refresh"),
-                   command=self.refresh_ports).grid(row=0, column=2)
-
-        ttk.Label(top, text=t("ui.image_file")).grid(row=1, column=0, sticky="w",
-                                                    pady=(8, 0))
         self.path = tk.StringVar()
-        ttk.Entry(top, textvariable=self.path, width=47).grid(row=1, column=1, sticky="w",
-                                                              padx=6, pady=(8, 0))
-        ttk.Button(top, text=t("ui.choose"), command=self.pick).grid(row=1, column=2,
-                                                                    pady=(8, 0))
-
-        # The one setting worth exposing.  Everything else the tool measures for itself;
-        # this is a genuine choice about how much time to trade for how much checking.
-        mode = ttk.LabelFrame(root, text=t("ui.mode_frame"), padding=(10, 6))
-        mode.pack(fill="x", padx=10, pady=(6, 0))
         self.mode = tk.StringVar(value="reliable")
-        ttk.Radiobutton(mode, variable=self.mode, value="reliable",
-                        text=t("ui.mode_reliable")).pack(anchor="w")
-        ttk.Radiobutton(mode, variable=self.mode, value="fast",
-                        text=t("ui.mode_fast")).pack(anchor="w")
-        ttk.Label(mode, foreground=self.soft, font=(UI_FAMILY, 8),
-                  text=t("ui.backup_note")).pack(anchor="w", pady=(4, 0))
-
-        # Off by default because on a FIRST write it is pure cost: it reads every sector
-        # before writing it, which is another pass over the whole image and buys nothing
-        # when there is nothing to skip.  Turned on automatically the moment a write does
-        # not finish -- that is when it is worth its price, and expecting the user to know
-        # that in advance is how the promise in the help got made and not kept.
-        # Remembered, because the moment it is armed is the moment the process is most
-        # likely to end: it is set after a write that did NOT finish.  Losing it on a
-        # language switch -- or on the next launch after a crash -- contradicts what the UI
-        # just promised and costs a full re-erase of every sector that was already correct.
         self.resume = tk.BooleanVar(value=bool(cfg.get("resume")))
-        ttk.Checkbutton(mode, variable=self.resume,
-                        text=t("ui.resume_check")).pack(anchor="w", pady=(2, 0))
-
-        btns = ttk.Frame(root, padding=(10, 0))
-        btns.pack(fill="x")
-        self.read_btn = ttk.Button(btns, text=t("ui.read_btn"), command=self.do_read)
-        self.read_btn.pack(side="left", ipadx=10, ipady=6)
-        self.write_btn = ttk.Button(btns, text=t("ui.write_btn"), command=self.do_write)
-        self.write_btn.pack(side="left", padx=10, ipadx=10, ipady=6)
-        # one door, since every button opened the same window anyway
-        ttk.Button(btns, text=t("ui.help_btn"), command=self.help_window).pack(side="right")
-
+        self.identity = tk.StringVar(value=t("ui.ecu_unchecked"))
+        self.file_info = tk.StringVar()
+        self.operation_note = tk.StringVar()
         self.status = tk.StringVar(value=t("st.ready"))
-        # wraplength under the minimum window width, not over it: at 840 against a
-        # 760 minsize the verdict -- the single most important line here -- ran off
-        # the edge of a window shrunk to its own minimum.
-        ttk.Label(root, textvariable=self.status, padding=(10, 8),
-                  wraplength=720, justify="left").pack(fill="x")
-        self.bar = ttk.Progressbar(root, mode="determinate", maximum=100)
-        self.bar.pack(fill="x", padx=10)
+        self._input_controls = []
 
-        logbar = ttk.Frame(root, padding=(10, 0))
+        # Native menus remain on the platform; the workspace and controls share the
+        # same palette as the help and log panes.
+        T = THEME
+        shell = tk.Frame(root, bg=T["surface_alt"], padx=24, pady=18)
+        shell.pack(fill="both", expand=True)
+
+        def label(parent, text=None, variable=None, size=10, muted=False, bold=False):
+            return tk.Label(parent, text=text, textvariable=variable, bg=parent.cget("bg"),
+                            fg=T["ink_soft" if muted else "ink"], anchor="w", justify="left",
+                            font=(UI_FAMILY, size, "bold" if bold else "normal"))
+
+        def panel(parent):
+            return tk.Frame(parent, bg=T["surface"], padx=20, pady=16,
+                            highlightthickness=1, highlightbackground=T["rule"])
+
+        header = tk.Frame(shell, bg=T["surface_alt"])
+        header.pack(fill="x", pady=(0, 18))
+        label(header, "openm74", size=24, bold=True).pack(side="left")
+        label(header, "M74 CAN · K-line BSL", muted=True).pack(side="left", padx=20)
+        ttk.Button(header, text=t("ui.help_btn"), command=self.help_window).pack(side="right")
+
+        body = tk.Frame(shell, bg=T["surface_alt"])
+        body.pack(fill="both", expand=True)
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+        sidebar = panel(body)
+        sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 18))
+        sidebar.configure(width=254)
+        sidebar.grid_propagate(False)
+        sidebar.pack_propagate(False)
+        label(sidebar, t("ui.connection"), size=15, bold=True).pack(anchor="w", pady=(0, 16))
+        label(sidebar, t("ui.adapter"), muted=True).pack(anchor="w")
+        self.port_box = ttk.Combobox(sidebar, textvariable=self.port, width=23, state="readonly")
+        self.port_box.pack(fill="x", pady=(6, 8))
+        ttk.Button(sidebar, text=t("ui.refresh"), command=self.refresh_ports).pack(anchor="w")
+        identity = label(sidebar, variable=self.identity, muted=True)
+        identity.configure(wraplength=208)
+        identity.pack(fill="x", pady=(16, 24))
+        label(sidebar, t("ui.target_ecu"), muted=True).pack(anchor="w", pady=(0, 6))
+        device = label(sidebar, t("app.device"))
+        device.configure(wraplength=208)
+        device.pack(fill="x", pady=(0, 20))
+        ttk.Button(sidebar, text=t("ui.wiring"),
+                   command=lambda: self.help_window(open_tab=1)).pack(anchor="w")
+        location = label(sidebar, t("ui.files_location"), muted=True)
+        location.configure(wraplength=208)
+        location.pack(side="bottom", fill="x", pady=(20, 0))
+
+        main = panel(body)
+        main.grid(row=0, column=1, sticky="nsew")
+        label(main, t("ui.operation"), size=17, bold=True).pack(anchor="w", pady=(0, 12))
+        selectors = tk.Frame(main, bg=T["surface"])
+        selectors.pack(fill="x", pady=(0, 10))
+        self.read_btn = ttk.Radiobutton(selectors, text=t("ui.read_tab"), value="read",
+                                       variable=self.operation, style="Workspace.Toolbutton",
+                                       command=self.select_operation)
+        self.read_btn.pack(side="left", padx=(0, 10), ipadx=8, ipady=6)
+        self.write_btn = ttk.Radiobutton(selectors, text=t("ui.write_tab"), value="write",
+                                        variable=self.operation, style="Workspace.Toolbutton",
+                                        command=self.select_operation)
+        self.write_btn.pack(side="left", ipadx=8, ipady=6)
+        note = label(main, variable=self.operation_note, muted=True)
+        note.configure(wraplength=650)
+        note.pack(fill="x", pady=(0, 12))
+
+        self.image_panel = tk.Frame(main, bg=T["surface_alt"], padx=14, pady=12)
+        self.image_panel.pack(fill="x", pady=(0, 12))
+        self.image_title = label(self.image_panel, t("ui.output_file"), muted=True)
+        self.image_title.pack(anchor="w")
+        file_info = label(self.image_panel, variable=self.file_info, bold=True)
+        file_info.configure(wraplength=600)
+        file_info.pack(fill="x", pady=(5, 0))
+        self.write_fields = tk.Frame(self.image_panel, bg=T["surface_alt"])
+        self.path_entry = ttk.Entry(self.write_fields, textvariable=self.path, width=24)
+        self.path_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.pick_btn = ttk.Button(self.write_fields, text=t("ui.choose"), command=self.pick)
+        self.pick_btn.pack(side="right")
+
+        self.write_settings = tk.Frame(main, bg=T["surface"])
+        modes = tk.Frame(self.write_settings, bg=T["surface"])
+        modes.pack(fill="x")
+        label(modes, t("ui.mode_frame")).pack(side="left", padx=(0, 10))
+        self.reliable_btn = ttk.Radiobutton(modes, variable=self.mode, value="reliable",
+                                           text=t("ui.reliable_short"),
+                                           command=self.update_operation)
+        self.reliable_btn.pack(side="left", padx=(0, 12))
+        self.fast_btn = ttk.Radiobutton(modes, variable=self.mode, value="fast",
+                                       text=t("ui.fast_short"), command=self.update_operation)
+        self.fast_btn.pack(side="left")
+        self.mode_note = label(self.write_settings, muted=True)
+        self.mode_note.configure(wraplength=600)
+        self.mode_note.pack(fill="x", pady=(4, 6))
+        self.resume_btn = ttk.Checkbutton(self.write_settings, variable=self.resume,
+                                         text=t("ui.resume_check"))
+        self.resume_btn.pack(anchor="w", pady=(0, 4))
+
+        self.summary_frame = tk.Frame(main, bg=T["surface"])
+        self.summary_frame.pack(fill="x", pady=(6, 12))
+        self.summary = tk.StringVar()
+        summary = label(self.summary_frame, variable=self.summary, muted=True)
+        summary.configure(wraplength=600)
+        summary.pack(fill="x")
+        tk.Frame(main, bg=T["rule"], height=1).pack(fill="x", pady=(0, 12))
+        label(main, t("ui.progress"), size=12, bold=True).pack(anchor="w", pady=(0, 6))
+        self.status_label = label(main, variable=self.status)
+        self.status_label.configure(wraplength=600)
+        self.status_label.pack(fill="x", pady=(0, 10))
+        self.bar = ttk.Progressbar(main, mode="determinate", maximum=100)
+        self.bar.pack(fill="x", pady=(0, 12))
+        actions = tk.Frame(main, bg=T["surface"])
+        actions.pack(fill="x")
+        self.start_btn = ttk.Button(actions, command=self.start_operation,
+                                    style="Workspace.Primary.TButton")
+        self.start_btn.pack(side="left", ipadx=12, ipady=6)
+        ttk.Button(actions, text=t("ui.open_log"), command=self.show_log).pack(side="right")
+        self._input_controls = [self.read_btn, self.write_btn, self.start_btn, self.port_box,
+                                self.path_entry, self.pick_btn, self.reliable_btn,
+                                self.fast_btn, self.resume_btn]
+        self.path.trace_add("write", lambda *_: self.update_operation())
+        self.port.trace_add("write", lambda *_: self.identity.set(t("ui.ecu_unchecked")))
+        self.update_operation()
+
+        # Keep the real log widget alive while its window is hidden: event handling,
+        # copying and saving all use this one buffer; closing it never loses evidence.
+        root.update_idletasks()        # map the workspace before creating a hidden native window
+        self._log_window = tk.Toplevel(root)
+        self._log_window.withdraw()
+        self._log_window.title(t("ui.log_title"))
+        self._log_window.geometry("900x430")
+        self._log_window.protocol("WM_DELETE_WINDOW", self._log_window.withdraw)
+        logbar = ttk.Frame(self._log_window, padding=10)
         logbar.pack(fill="x")
         ttk.Label(logbar, text=t("ui.log")).pack(side="left")
         ttk.Button(logbar, text=t("ui.copy"), command=self.copy_log).pack(side="right")
-        ttk.Button(logbar, text=t("ui.save_as"),
-                   command=self.save_log).pack(side="right", padx=6)
+        ttk.Button(logbar, text=t("ui.save_as"), command=self.save_log).pack(side="right", padx=6)
         ttk.Button(logbar, text=t("ui.clear"), command=self.clear_log).pack(side="right")
-
-        # left editable on purpose: a disabled Text refuses to be selected, and the one
-        # thing anyone asks for when something goes wrong is the log text
-        # Themed rather than left to the system: the system's dark text background is
-        # near-black, which reads as a hole punched in the window rather than a surface, and
-        # it does not match the drawings.  One surface everywhere is what makes the app look
-        # like one app.
-        self.log = tk.Text(root, height=20, wrap="none", font=(MONO_FAMILY, 9),
-                           undo=False, exportselection=True,
-                           bg=THEME["surface"], fg=THEME["ink"],
-                           insertbackground=THEME["ink"],
-                           highlightthickness=1, highlightbackground=THEME["edge"],
-                           highlightcolor=THEME["edge"], borderwidth=0)
-        self.log.pack(fill="both", expand=True, padx=10, pady=(4, 10))
+        self.log = tk.Text(self._log_window, height=15, wrap="none", font=(MONO_FAMILY, 9),
+                           undo=False, exportselection=True, bg=T["surface"], fg=T["ink"],
+                           insertbackground=T["ink"], highlightthickness=1,
+                           highlightbackground=T["edge"], highlightcolor=T["edge"], borderwidth=0)
+        self.log.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.log.bind("<Key>", self._readonly_keys)
         self.log_menu = self.build_log_menu()
 
@@ -891,6 +939,47 @@ class App:
         # Held so a rebuild can cancel it.  Re-running __init__ without this
         # leaves the previous loop alive and two drains race for the queue.
         self._drain_id = self.root.after(80, self.drain)
+
+    def show_log(self):
+        self._log_window.deiconify()
+        self._log_window.lift()
+
+    def select_operation(self):
+        if self.busy or self._closing:
+            return
+        self.update_operation()
+
+    def update_operation(self):
+        writing = self.operation.get() == "write"
+        self.operation_note.set(t("ui.write_description" if writing else "ui.read_description"))
+        self.image_title.configure(text=t("ui.image_file" if writing else "ui.output_file"))
+        self.start_btn.configure(text=t("ui.write_btn" if writing else "ui.read_btn"))
+        if writing:
+            self.write_fields.pack(fill="x", pady=(10, 0))
+            self.write_settings.pack(fill="x", before=self.summary_frame)
+            path = self.path.get()
+            try:
+                size = os.path.getsize(path)
+            except OSError:
+                self.file_info.set(t("ui.no_image"))
+            else:
+                self.file_info.set(t("ui.image_details", os.path.basename(path), size // 1024))
+            self.mode_note.configure(text=t("ui.mode_fast" if self.mode.get() == "fast"
+                                            else "ui.mode_reliable"))
+            self.summary.set(t("ui.backup_note"))
+        else:
+            self.write_fields.pack_forget()
+            self.write_settings.pack_forget()
+            self.file_info.set(t("ui.output_before_read"))
+            self.summary.set(t("ui.read_summary"))
+
+    def start_operation(self):
+        if self.busy or self._closing:
+            return
+        if self.operation.get() == "write":
+            self.do_write()
+        else:
+            self.do_read()
 
     @staticmethod
     def _readonly_keys(event):
@@ -1089,7 +1178,7 @@ class App:
 
     def change_theme(self):
         """Switch palette.  Same rebuild as a language change, for the same reason."""
-        if self.busy:
+        if self.busy or self._closing:
             self.theme.set(load_config().get("theme") or "auto")
             return
         save_config(theme=self.theme.get())
@@ -1107,7 +1196,7 @@ class App:
         want = self.lang.get()
         if want not in i18n.LANGS or want == i18n.get_lang():
             return
-        if self.busy:                       # never re-lay the window out mid-flash
+        if self.busy or self._closing:      # never re-lay the window out mid-flash
             self.lang.set(i18n.get_lang())
             return
         i18n.set_lang(want)
@@ -1117,6 +1206,10 @@ class App:
     def rebuild(self):
         """Tear the window down and put it back up in the current language."""
         text = self.log.get("1.0", "end-1c")
+        geometry = self.root.geometry()
+        selection = (self.operation.get(), self.path.get(), self.port.get(),
+                     self.mode.get(), self.resume.get())
+        log_visible = self._log_window.state() != "withdrawn"
         try:
             self.root.after_cancel(self._drain_id)
         except Exception:
@@ -1129,6 +1222,16 @@ class App:
         for w in self.root.winfo_children():
             w.destroy()
         self.__init__(self.root)
+        self.root.geometry(geometry)
+        operation, path, port, mode, resume = selection
+        self.operation.set(operation)
+        self.path.set(path)
+        self.port.set(port)
+        self.mode.set(mode)
+        self.resume.set(resume)
+        self.update_operation()
+        if log_visible:
+            self.show_log()
         if text.strip():
             self.log.insert("end", text)
             self.log.see("end")
@@ -1206,8 +1309,9 @@ class App:
         if not self.power_cycle_prompt():
             return
         self.busy = True
-        for b in (self.read_btn, self.write_btn):
+        for b in self._input_controls:
             b.state(["disabled"])
+        self.identity.set(t("ui.ecu_unchecked"))
         self.bar["value"] = 0
         self.results = []           # this run's verdicts; finish() decides from these alone
         # Counted from the per-region problem events, which are emitted once each.
@@ -1343,6 +1447,10 @@ class App:
                 self.status.set(t("pr.bytes", what, pct, done // 1024, total // 1024,
                                   self._eta(ev)))
         elif kind == "stage":
+            if ev.get("stage") == "identity":
+                self.identity.set(t("ui.ecu_checked" if ev.get("ok") else
+                                    "ui.ecu_overridden" if ev.get("forced") else
+                                    "ui.ecu_refused"))
             if ev.get("stage") == "backup-saved" and ev.get("path"):
                 self.say(t("st.backup_at", ev["path"]))
             if ev.get("stage") == "rom-checksum":
@@ -1408,7 +1516,7 @@ class App:
 
     def finish(self, code):
         self.busy = False
-        for b in (self.read_btn, self.write_btn):
+        for b in self._input_controls:
             b.state(["!disabled"])
         # A nonzero exit code is a failure whatever the events said.  The engine can emit a
         # passing result and then die -- final_verify raising something that is not IOError,

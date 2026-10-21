@@ -117,6 +117,94 @@ STRINGS = {
     },
 
     # --- main window ------------------------------------------------------
+    "ui.read_tab": {"ru": u"Чтение", "en": u"Read"},
+    "ui.write_tab": {"ru": u"Запись", "en": u"Write"},
+    "ui.connection": {
+        "ru": u"Подключение",
+        "en": u"Connection",
+    },
+    "ui.target_ecu": {
+        "ru": u"Целевой блок",
+        "en": u"Target ECU",
+    },
+    "ui.ecu_unchecked": {
+        "ru": u"ЭБУ ещё не проверен",
+        "en": u"ECU not checked yet",
+    },
+    "ui.ecu_checked": {
+        "ru": u"Последняя проверка: блок опознан",
+        "en": u"Last check: ECU identified",
+    },
+    "ui.ecu_overridden": {
+        "ru": u"Проверка не пройдена — включён обход",
+        "en": u"Check failed — override enabled",
+    },
+    "ui.ecu_refused": {
+        "ru": u"Проверка блока не пройдена",
+        "en": u"ECU check failed",
+    },
+    "ui.wiring": {
+        "ru": u"Схема подключения",
+        "en": u"Wiring diagram",
+    },
+    "ui.files_location": {
+        "ru": u"Путь к журналу и бэкапам указан в журнале.",
+        "en": u"The log lists where logs and backups are saved.",
+    },
+    "ui.operation": {
+        "ru": u"Операция с прошивкой",
+        "en": u"Firmware operation",
+    },
+    "ui.read_description": {
+        "ru": u"Сохранение полного образа флеша. Содержимое ЭБУ не меняется.",
+        "en": u"Save the full flash image. The ECU is not modified.",
+    },
+    "ui.write_description": {
+        "ru": u"Запись образа с резервной копией и проверкой результата.",
+        "en": u"Write an image with a backup and verification.",
+    },
+    "ui.output_file": {
+        "ru": u"Файл для сохранения",
+        "en": u"Output file",
+    },
+    "ui.output_before_read": {
+        "ru": u"Папка и имя будут выбраны перед чтением",
+        "en": u"Choose the folder and filename before reading",
+    },
+    "ui.no_image": {
+        "ru": u"Выберите доступный файл образа",
+        "en": u"Choose a readable image file",
+    },
+    "ui.image_details": {
+        "ru": u"%s · %d КБ",
+        "en": u"%s · %d KB",
+    },
+    "ui.reliable_short": {
+        "ru": u"Надёжно",
+        "en": u"Reliable",
+    },
+    "ui.fast_short": {
+        "ru": u"Быстро",
+        "en": u"Fast",
+    },
+    "ui.read_summary": {
+        "ru": u"После чтения проверяются размер образа и контрольная сумма ПЗУ, "
+              u"если её удаётся определить.",
+        "en": u"After reading, image size and ROM checksum are checked "
+              u"when the checksum can be identified.",
+    },
+    "ui.progress": {
+        "ru": u"Ход операции",
+        "en": u"Operation progress",
+    },
+    "ui.open_log": {
+        "ru": u"Журнал ↗",
+        "en": u"Log ↗",
+    },
+    "ui.log_title": {
+        "ru": u"openm74 — журнал операций",
+        "en": u"openm74 — operation log",
+    },
     "ui.adapter": {"ru": u"Адаптер:", "en": u"Adapter:"},
     "ui.refresh": {"ru": u"Обновить", "en": u"Refresh"},
     "ui.image_file": {"ru": u"Файл образа:", "en": u"Image file:"},
