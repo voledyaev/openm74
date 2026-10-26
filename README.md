@@ -33,23 +33,25 @@ and then read back by a *different* mechanism matched the source file 851968/851
   programmer, not this connector
 * Not for other ECU families as it stands — but "M74" covers at least six different
   microcontrollers, and this one targets the `SAK-XC2765X`. The non-CAN M74 uses the same
-  part, and so do the Mikas 12 family and some Marelli units; M74K, M74M and everything from
-  M74.8 onward do not, and neither does any Yanvar. A write is refused unless the silicon
+  part in the available image inventory. Mikas and Marelli remain candidates without
+  inspected samples; see [ECU support evidence](docs/ECU_SUPPORT.md). M74K and the other
+  architectures listed below remain outside support. A write is refused unless the silicon
   identifies itself as the part these stages were built for. Reading is never refused, and a
   dump from an unrecognised unit is exactly what would let it be supported —
   [docs/FINDINGS.md](docs/FINDINGS.md) §2b.
 
 ## Why it exists
 
-**Over CAN, this ECU is not reachable without specialised commercial tooling.** The mask
-ROM runs exactly one bootloader, chosen by the level on four pins latched at power-on, and
-the pattern this ECU presents selects the *UART* one — so it listens on the K-line pin and
-nowhere else. Reaching the CAN loader instead needs a different pattern held on those pins
-at power-on and a host wired to CAN node 0's own pins, neither of which a vehicle-side cable
-carries. That is the whole of it; see [docs/FINDINGS.md](docs/FINDINGS.md) §1. What is left is the *resident* loader in the
-boot sector, which is proprietary and whose command table has erase, program and a CRC check
-but **no read opcode at all**: a route that can write but cannot take a backup. For a device whose current contents may be the only copy in
-existence, that is worse than no route. See [docs/FINDINGS.md](docs/FINDINGS.md) §1.
+**K-line is the implemented path for full backup and recovery.** The mask-ROM UART BSL
+and the flash-resident CAN loader are separate mechanisms. Earlier CAN/ROM experiments
+must not be treated as tests of the resident loader's startup protocol.
+
+Offline analysis identifies erase, program and CRC paths in the examined resident loader,
+with a restricted address range. There is no identified bulk-upload command. A hypothesis
+for reconstructing four-byte regions from CRC replies passes local mathematical checks,
+but no such exchange has been tested on an ECU, and it cannot provide a full recovery
+backup. CAN read/write remains research, not a supported feature; see
+[the loader analysis](docs/CAN_LOADER.md).
 
 K-line is the alternative, and the microcontroller's own mask-ROM serial loader takes
 arbitrary code and runs it — which is what makes reading possible at all, and what makes an
@@ -59,6 +61,10 @@ What this project adds over the existing K-line tooling is **cross-platform**, *
 and **quick**: it runs on Windows, macOS and Linux from one code path; it reads a full
 backup before erasing a byte and refuses to start without one; it verifies every sector and
 says so when something did not land; and a whole 832 KB image goes in about eight minutes in fast mode, about thirteen in the reliable one that is the default.
+
+CAN research is paused at an offline checkpoint (2026-10-27), pending ECU/adapter bench
+validation. [Research index and restart guide](docs/RESEARCH.md) collects the evidence,
+reproduction commands and unresolved questions. The working application remains K-line only.
 
 ## Safety
 
@@ -241,17 +247,18 @@ nothing is wrong.
 **Untested, entirely at your own risk, and read the sentence after the table before you act
 on it.**
 
-The tool targets the Infineon `SAK-XC2765X`. That is a *die*, not a part number: several
-marketing names share it, and they share the memory map and register layout with it, which
-is what actually decides whether the code this tool uploads is safe to run.
+The tool targets the Infineon `SAK-XC2765X` reference platform. Reported hardware
+associations below are candidates, not proof that another ECU has the same wiring,
+firmware protocol or safe flash layout. The [evidence audit](docs/ECU_SUPPORT.md)
+records exactly which images and hardware have been inspected.
 
-| ECU | Microcontroller | Same map? | How strong is the evidence |
+| ECU | Microcontroller | Map verified here? | How strong is the evidence |
 |---|---|---|---|
-| **M74** (non-CAN, K-line) | SAK-XC2765X | **yes** | firmware packs and tool lists name the same part |
+| **M74** (non-CAN, K-line) | reported SAK-XC2765X | no board measurement | image comparison only |
 | **M74 CAN** | SAK-XC2765X | **yes** | this is the reference unit — measured |
-| **Mikas 12 / 12.3 / 12.48** | SAK-XC2765X | **yes** | repair documentation |
-| **Marelli IAW 7GV** | SAK-XC2785X | **yes** — same die | tool compatibility lists |
-| **Marelli IAW MIU4** (Vespa, Moto Guzzi, Aprilia) | XC2765 | **yes** — same die | vendor markets it by that name |
+| **Mikas 12 / 12.3 / 12.48** | exact variants unverified here | no | no firmware sample or bench test |
+| **Marelli IAW 7GV** | reported SAK-XC2785X | no | no firmware sample or bench test |
+| **Marelli IAW MIU4** (Vespa, Moto Guzzi, Aprilia) | exact variants unverified here | no | no firmware sample or bench test |
 | M74K | ST10F273 | no | different core entirely |
 | M74M | XC2361A or XC2060M | XC2361A shares the die; XC2060M unknown | no public datasheet for XC2060M |
 | M74.8 and later, M74.9 | SPC58, then ARM | no | different architecture |
@@ -408,6 +415,11 @@ the backup. The tool refuses to write without one for a reason.
 * [docs/HARDWARE.md](docs/HARDWARE.md) — the ECU modification, pinout, bench wiring
 * [docs/PROTOCOL.md](docs/PROTOCOL.md) — bootloader entry, stages, the monitor's command
   set, flash command sequences
+* [docs/ECU_SUPPORT.md](docs/ECU_SUPPORT.md) — support evidence and offline research coverage
+* [docs/CAN_BENCH_PLAN.md](docs/CAN_BENCH_PLAN.md) — planned CAN entry, read, freshness and recovery experiments
+* [docs/CAN_CLIENT.md](docs/CAN_CLIENT.md) — experimental offline client contract and reply matching
+* [docs/CAN_LOADER.md](docs/CAN_LOADER.md) — static map of the flash-resident CAN loader;
+  entry conditions, register-derived identifiers and unverified runtime assumptions
 * [docs/QUIRKS.md](docs/QUIRKS.md) — everything the K-line does that no datasheet mentions
 * [docs/FINDINGS.md](docs/FINDINGS.md) — the error model, dead ends, and the measurement
   mistakes that produced them

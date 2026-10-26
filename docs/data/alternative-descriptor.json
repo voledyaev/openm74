@@ -1,0 +1,14 @@
+{
+  "cases": 12,
+  "data_bytes": 528,
+  "metadata_bytes": 2,
+  "field_bytes": 514,
+  "field_records": 58,
+  "connected_startup_cases": 4,
+  "parent_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "46157c1811aaef7e162d6780aa1d77fc3b22f9ce19da135b4c9f701a7f08dd9b",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Generated serial reads at call boundaries; actual descriptor and numeric helper code with synthetic RAM and inherited call shims. No device I/O, serial timing, reset or full startup."
+}

@@ -1,0 +1,16 @@
+{
+  "cases": 48,
+  "selection_matrix_cases": 40,
+  "connected_cases": 5,
+  "scatter_bytes": 315,
+  "default_configuration_cases": 2,
+  "tail_selection_cases": 1,
+  "static_restore_call_sites": 2,
+  "parent_script_sha256": "27579cf57cf0c9bc729877aabeff8f53d742426200cc791ff3abfef3dc10c5b5",
+  "preparation_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "ca9e0d10bcfeef417bc9d3296656af4b6e4f2b8253fee8b110370284fba74c1a",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Three-copy restore selection and scatter. Matrix cases replace slot initialization; connected cases use actual initialization with generated flash and held-ready registers. Indirect dispatch shim; all-invalid executes application defaults. No full startup, flash writes, timing or ECU I/O."
+}

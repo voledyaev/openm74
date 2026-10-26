@@ -1,0 +1,23 @@
+{
+  "cases": 77,
+  "descriptor_cases": 8,
+  "outer_cases": 4,
+  "pair_cases": 16,
+  "single_cases": 6,
+  "scatter_lengths": [
+    1955,
+    1886,
+    88,
+    1
+  ],
+  "startup_sequences": 3,
+  "startup_gate_prefixes": 8,
+  "producer_bridge_cases": 32,
+  "parent_script_sha256": "27579cf57cf0c9bc729877aabeff8f53d742426200cc791ff3abfef3dc10c5b5",
+  "preparation_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "a697bfd5c482f6e5bf44fedb3d90f18b0a3c45fe8f5a0a3bff824bfbced443c8",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Actual initializer/read/checksum and restore scatter for other groups, generated flash records and held-ready RAM registers. Indirect callback dispatch shim, bounded startup restore sequence and flag-gate/producer prefixes with injected probe result. No full startup, erase/program, reset, timing or ECU I/O."
+}

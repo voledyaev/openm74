@@ -1,0 +1,121 @@
+{
+  "cases": 1024,
+  "preparation_entry": 4,
+  "direct_reset_tail": 1020,
+  "aligned_direct_call_candidates": [
+    "c507d2",
+    "c5d208",
+    "c5d28a",
+    "c6050e",
+    "c6aa1a",
+    "c6aaac",
+    "c6ab6c"
+  ],
+  "aligned_srst_opcode_occurrences": [
+    "c002da",
+    "c0d6b8"
+  ],
+  "static_preparation_helpers": [
+    {
+      "entry": "c1055e",
+      "instructions": 2811,
+      "returns": 1,
+      "call_sites": 408,
+      "direct_callees_not_followed": [
+        "c080dc",
+        "c10000",
+        "c10060",
+        "c101f8",
+        "c12e00",
+        "c4ff1c",
+        "c5e75c",
+        "c5e85e",
+        "c5e890",
+        "c5e8fc"
+      ]
+    },
+    {
+      "entry": "c12f10",
+      "instructions": 359,
+      "returns": 1,
+      "call_sites": 33,
+      "direct_callees_not_followed": [
+        "c10000",
+        "c10060",
+        "c101f8",
+        "c4ff1c",
+        "c5e75c",
+        "c5e85e",
+        "c5e890",
+        "c5e8fc"
+      ]
+    },
+    {
+      "entry": "c4577c",
+      "instructions": 241,
+      "returns": 1,
+      "call_sites": 16,
+      "direct_callees_not_followed": [
+        "c0272c",
+        "c08566",
+        "c447fe",
+        "c4491a",
+        "c44a20"
+      ]
+    },
+    {
+      "entry": "c45720",
+      "instructions": 38,
+      "returns": 1,
+      "call_sites": 4,
+      "direct_callees_not_followed": [
+        "c455fa"
+      ]
+    },
+    {
+      "entry": "c10000",
+      "instructions": 22,
+      "returns": 1,
+      "call_sites": 1,
+      "direct_callees_not_followed": [
+        "c0272c"
+      ]
+    }
+  ],
+  "can_transport": {
+    "cases": 6,
+    "negative_cases": 4,
+    "rx_ids": [
+      2015,
+      2016
+    ],
+    "buffer": "00fa54",
+    "initializer_record": "c049a2",
+    "scope": "Synthetic frame at software receive dispatch; real copy/parser p-code, CALLS/RETS shims, modeled RAM/DPP/controller state; no CAN peripheral, arbitration, authorization, post-processing or reset execution"
+  },
+  "admission_gates": {
+    "entry_cases": 256,
+    "post_length_cases": 255,
+    "state_cell": "00c704",
+    "length_cell": "e01656",
+    "scope": "Synthetic state byte and injected length result; stopped before calls or alternate branches; no reception, callees or full dispatcher execution"
+  },
+  "diagnostic_parsers": {
+    "first_entry": "c57f8e",
+    "first_cases": 512,
+    "first_accepted": 4,
+    "second_entry": "c666dc",
+    "second_cases": 256,
+    "second_accepted": 3,
+    "negative_cases": 11,
+    "scope": "Synthetic RAM; modeled DPP and EXTP; no transport, dispatcher, authorization or reset execution"
+  },
+  "checked_marker_cell": "e02406",
+  "checked_reset_parameter_producers": [
+    "c58060",
+    "c666f2"
+  ],
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "d20bcd342827499e93fe418f589ab3a8cc45c2ad582c2072084e0c05adef493a",
+  "scope": "One reviewed image; reset-prefix and synthetic-RAM diagnostic parser/admission and software CAN receive p-code; reset prefix stops before reset-tail NOP or preparation. Candidate call/opcode scan is not complete control-flow analysis. Bounded helper CFG surveys exclude callees and do not execute preparation. No device or reset emulation."
+}

@@ -1,0 +1,185 @@
+{
+  "host": "Darwin arm64",
+  "script_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "scope": "Firmware p-code with address/call shims; modeled CAN and flash effects; no silicon, timing, bus exchange or readback verification",
+  "images": [
+    {
+      "file": "I444GI04.bin",
+      "size": 851968,
+      "sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+      "boot_sha256": "7f1fd47c391a68460ebf3cfb78c0679c24e75470fd9787e368eb48032804310e",
+      "variant": "common",
+      "cases": 41,
+      "ghidra": "12.1.4",
+      "language": "C166:LE:16:default",
+      "synthetic_trace": {
+        "kind": "synthetic-pcode-model",
+        "payload_sha256": "cbfee57093b600520fa472bb2cd32dd58482380623792f8dcc0dcb82984b9555",
+        "rows": [
+          {
+            "request": "0100966900000000",
+            "replies": [
+              "ff0000699669a5a5",
+              "0000000000000000"
+            ]
+          },
+          {
+            "request": "0101020000000000",
+            "replies": [
+              "ff0001fe01000000"
+            ]
+          },
+          {
+            "request": "020200000020c000",
+            "replies": [
+              "ff0002fe01000000"
+            ]
+          },
+          {
+            "request": "0e03040000000000",
+            "replies": [
+              "ff0003045a0c1d19"
+            ]
+          },
+          {
+            "request": "020400000420c000",
+            "replies": [
+              "ff0004045a0c1d19"
+            ]
+          },
+          {
+            "request": "0e05040000000000",
+            "replies": [
+              "ff000504f80d42f4"
+            ]
+          },
+          {
+            "request": "0e03040000000000",
+            "replies": [
+              "ff000304f80d42f4"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "I414DB02.bin",
+      "size": 851968,
+      "sha256": "5ade0ca25a6ddaacd127611bbb817c9183d082ecb68c512c3c67382b6dfb8e81",
+      "boot_sha256": "a7162971cbbdaeebf8d9ae421220b981df64bcbd4bc876b503a7304ec2a0df99",
+      "variant": "early",
+      "cases": 41,
+      "ghidra": "12.1.4",
+      "language": "C166:LE:16:default",
+      "synthetic_trace": {
+        "kind": "synthetic-pcode-model",
+        "payload_sha256": "cbfee57093b600520fa472bb2cd32dd58482380623792f8dcc0dcb82984b9555",
+        "rows": [
+          {
+            "request": "0100966900000000",
+            "replies": [
+              "ff0000699669a5a5",
+              "0000000000000000"
+            ]
+          },
+          {
+            "request": "0101020000000000",
+            "replies": [
+              "ff0001fe01000000"
+            ]
+          },
+          {
+            "request": "020200000020c000",
+            "replies": [
+              "ff0002fe01000000"
+            ]
+          },
+          {
+            "request": "0e03040000000000",
+            "replies": [
+              "ff0003045a0c1d19"
+            ]
+          },
+          {
+            "request": "020400000420c000",
+            "replies": [
+              "ff0004045a0c1d19"
+            ]
+          },
+          {
+            "request": "0e05040000000000",
+            "replies": [
+              "ff000504f80d42f4"
+            ]
+          },
+          {
+            "request": "0e03040000000000",
+            "replies": [
+              "ff000304f80d42f4"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "file": "I465AI01.bin",
+      "size": 786432,
+      "sha256": "f8d68d1042bcad8eb8ed9787bdc2ac04f49a356abe4f2d0f8a2fa14227ffb940",
+      "boot_sha256": "eb269ea46fe7432742f1d321ebe711cbf8a34b7aa1a03f78e6afaca4e2c84c7b",
+      "variant": "common-tail",
+      "cases": 41,
+      "ghidra": "12.1.4",
+      "language": "C166:LE:16:default",
+      "synthetic_trace": {
+        "kind": "synthetic-pcode-model",
+        "payload_sha256": "cbfee57093b600520fa472bb2cd32dd58482380623792f8dcc0dcb82984b9555",
+        "rows": [
+          {
+            "request": "0100966900000000",
+            "replies": [
+              "ff0000699669a5a5",
+              "0000000000000000"
+            ]
+          },
+          {
+            "request": "0101020000000000",
+            "replies": [
+              "ff0001fe01000000"
+            ]
+          },
+          {
+            "request": "020200000020c000",
+            "replies": [
+              "ff0002fe01000000"
+            ]
+          },
+          {
+            "request": "0e03040000000000",
+            "replies": [
+              "ff0003045a0c1d19"
+            ]
+          },
+          {
+            "request": "020400000420c000",
+            "replies": [
+              "ff0004045a0c1d19"
+            ]
+          },
+          {
+            "request": "0e05040000000000",
+            "replies": [
+              "ff000504f80d42f4"
+            ]
+          },
+          {
+            "request": "0e03040000000000",
+            "replies": [
+              "ff000304f80d42f4"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

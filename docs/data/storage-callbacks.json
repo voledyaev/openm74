@@ -1,0 +1,13 @@
+{
+  "cases": 35,
+  "registration_cases": 1,
+  "error_callbacks": 10,
+  "page_completions": 8,
+  "interrupt_gate_prefixes": 16,
+  "parent_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "3491226e5d5f3ffcb0015ae0ea59bc294ddfa83631f90c312e0728307a95b877",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Synthetic page comparison and callback registration/error routing. Indirect far-return thunk uses explicit callback dispatch shim. Interrupt admission prefix skips watchdog. No IRQ, flash physics, program command completion or persistence model."
+}

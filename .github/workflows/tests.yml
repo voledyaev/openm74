@@ -47,6 +47,12 @@ jobs:
         run: uv run python tests/test_monitor_fakeecu.py
       - name: ROM checksum math (field-independent, reserved sector)
         run: uv run python tests/test_checksum.py
+      - name: Archived research metadata and hardware-free protocol models
+        run: |
+          uv run python tools/check_research_evidence.py
+          uv run python tools/check_can_crc_hypothesis.py
+          uv run python tools/check_can_reply_matching.py
+          uv run python tools/check_can_fifo_barrier.py
       # The bilingual docs are only survivable while something checks that the two halves
       # still agree on every number.  Needs no display, so it rides with the engine job.
       - name: English and Russian docs agree on every number

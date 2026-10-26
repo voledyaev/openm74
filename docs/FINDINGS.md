@@ -17,19 +17,21 @@ arbitrary execution means it can be made to do anything, including stream flash 
 lives in mask ROM, so it does not depend on flash contents, which is what makes erasing
 recoverable.
 
-### The resident CAN loader — abandoned, and not for the obvious reason
+### The resident CAN loader — static evidence, no verified transport
 
-It exists, it is reachable, and it is proprietary. It also has a command table with
-erase, program and a CRC check — **and no read opcode at all**.
+The examined firmware contains a separate loader with erase, program and CRC handlers,
+but no bulk-flash upload command was identified. Its startup exchange has not been
+verified on the bench; it must not be confused with the ROM CAN BSL experiment below.
 
-That is decisive: even a complete win over the CAN path gives you a tool that can write
-but cannot take a backup. For a device where the current contents may be the only copy in
-existence, a write-only tool is worse than none. The effort went to K-line instead.
+A missing read opcode does not prove that its admitted region cannot be read. Offline
+analysis shows that the modeled CRC of a four-byte interval can be inverted without a
+known reference image. That hypothesis has passed local numerical checks, but no ECU
+CRC query has been performed. It covers only the handler's admitted range and cannot
+provide a full recovery backup. Speed remains unmeasured.
 
-*(There is a way to read through it anyway — CRC a region against a known image, block by
-block, and reconstruct by difference. Elegant, absurdly slow, and unnecessary once the
-serial loader works. Recorded in case someone needs it on a unit without the K-line
-option.)*
+[CAN_LOADER.md](CAN_LOADER.md) records sample hashes, disassembly, command limits,
+corpus comparison and the offline proof. K-line remains the implemented, bench-tested
+path for full backup and recovery; CAN is a research direction.
 
 ### The ROM's CAN loader — never answers, and the manual says why
 
@@ -116,8 +118,9 @@ exactly why it was believable. But it explains an observation that has a simpler
 loader was not selected — and it was written here as settled fact on the strength of fitting
 the symptom. Fitting the symptom is not the same as being the cause.
 
-**None of which changes the decision**, because the route was abandoned for the reason above
-it: the loader reachable from running firmware over CAN cannot read.
+**The ROM experiment and the resident loader remain separate paths.** Neither silence in
+the former nor the absence of a read opcode in the latter establishes that CAN reading
+is impossible; the bounded CRC hypothesis above remains untested on hardware.
 
 ### Diagnostic services on the running application — absent
 

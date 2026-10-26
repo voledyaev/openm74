@@ -179,3 +179,21 @@ uv run python tools/check_docs_parity.py       # every number and identifier, En
 измеряет каждую строку относительно ячейки, в которую та должна поместиться.
 
 ---
+
+## Офлайн-веха исследования
+
+CAN/прошивочный разбор остановлен до стендовых свидетельств. Начните с
+[RESEARCH.md](RESEARCH.md): там указатель свидетельств, необязательное воспроизведение
+в Ghidra и границы продолжения. Исследовательские инструменты не входят в рабочий транспорт.
+
+```
+uv run python tools/check_research_evidence.py  # archived source hashes and corpus references
+uv run python tools/check_can_crc_hypothesis.py # numerical model only, no supplied firmware
+uv run python tools/check_can_reply_matching.py # synthetic reply faults
+uv run python tools/check_can_fifo_barrier.py   # bounded abstract queue model
+```
+
+Они работают без ЭБУ, файлов прошивки или Ghidra и включены в CI. Они не подтверждают
+оборудование и не повторяют сохранённое исполнение прошивки. Сохраняйте соответствие
+хешей отчётов/исходников; изменение скрипта Ghidra требует повторного запуска его обёртки
+на исследованном образе.

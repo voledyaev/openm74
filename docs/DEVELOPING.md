@@ -172,3 +172,20 @@ every string against the cell it has to fit in.
 
 ---
 
+
+## Offline research checkpoint
+
+CAN/firmware analysis is paused pending bench evidence. Start at
+[RESEARCH.md](RESEARCH.md) for the evidence index, optional Ghidra reproduction and
+restart boundaries. Research tools are not part of the production transport.
+
+```
+uv run python tools/check_research_evidence.py  # archived source hashes and corpus references
+uv run python tools/check_can_crc_hypothesis.py # numerical model only, no supplied firmware
+uv run python tools/check_can_reply_matching.py # synthetic reply faults
+uv run python tools/check_can_fifo_barrier.py   # bounded abstract queue model
+```
+
+These run without an ECU, firmware files or Ghidra and are included in CI. They do not
+validate hardware or rerun the archived firmware execution. Preserve report/source hash
+consistency; changing a Ghidra script requires rerunning its reviewed-image wrapper.

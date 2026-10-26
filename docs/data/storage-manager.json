@@ -1,0 +1,12 @@
+{
+  "cases": 22,
+  "submission_transitions": 9,
+  "completion_transitions": 8,
+  "lower_completions": 5,
+  "parent_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "ba7ef8c70678bd4c90e55602ed37d928f583339f849925decaf3bcfce698dbba",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Synthetic manager state transitions, injected lower submission results and actual lower completion with callback unset. No scheduler, IRQ, flash or persistence model."
+}

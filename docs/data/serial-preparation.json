@@ -1,0 +1,22 @@
+{
+  "cases": 34,
+  "ready_scenarios": 32,
+  "not_ready_prefixes": 2,
+  "zero_length_transfers_one_byte": true,
+  "caller_static_payload_length": 320,
+  "caller_static_data_addresses": [
+    336,
+    656,
+    976
+  ],
+  "caller_static_metadata_addresses": [
+    1296,
+    1312,
+    1328
+  ],
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "e445542ef4711857f826d97ba6877c5b3c65fa62142b9b09178b45c908b4e15f",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Synthetic held-ready status/RX injection; serial-helper p-code. Plain RAM replaces serial command ports; no external device, CAN, time or recovery proof. Caller geometry is static only, not full preparation execution or device capacity evidence."
+}

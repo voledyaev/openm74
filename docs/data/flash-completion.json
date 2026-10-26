@@ -1,0 +1,10 @@
+{
+  "cases": 38,
+  "status_combinations": 32,
+  "busy_prefixes": 3,
+  "program_scenarios": 3,
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "40d0102b4161d0f3e58dca5048065b9cbb015d35030f157bcba2aa4ac76a07aa",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Synthetic status-register injection and real helper p-code. Plain emulator RAM replaces flash command ports; no flash physics, CAN, timeouts in time units, silicon execution or recovery proof."
+}

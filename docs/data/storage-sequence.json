@@ -1,0 +1,19 @@
+{
+  "cases": 19,
+  "connected_slots": [
+    0,
+    1,
+    4,
+    5,
+    6
+  ],
+  "immediate_rejections": 7,
+  "connected_successes": 10,
+  "corruption_cases": 2,
+  "parent_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "2eb2042f48f8872af1bfd3751141c3de57f91d8e330f9782cce1120fd33f8f22",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Connected submission and erase/program continuation with explicit synthetic flash effects and interrupt delivery. Indirect thunk shim; no flash physics, timing, reset or ECU I/O."
+}

@@ -1,0 +1,16 @@
+{
+  "cases": 50,
+  "return_pairs": 16,
+  "table_patterns": 3,
+  "sentinel_words": 82,
+  "nested_read_cases": 2,
+  "nested_read_bytes": 544,
+  "field_records": 42,
+  "field_bytes": 45,
+  "parent_script_sha256": "fdf1b06db111a836b811dbe23699e987862062915d69c632522f30c54ab449a0",
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "277e436148cadb82df02e3a59add8c5821ecb1267a82b775adb327131011a6b7",
+  "shim_sha256": "a763cb74185ed2e3787f90eb118c1bcd87eb31350e16bba100474a6ebe737f81",
+  "scope": "Nested read results and sentinel table contents are injected; caller and application default code execute. Watchdog skipped. Two nested read cases inject serial chunks; no actual serial transaction, complete alternative restore, full startup, reset, flash operation, timing or ECU I/O."
+}

@@ -236,6 +236,11 @@ local context or the user without adding private provenance to this repository.
 
 ### Known follow-up work
 
+* CAN/firmware research is paused at the offline milestone. See the checkpoint below
+  and `docs/RESEARCH.md` before interpreting any older investigation follow-up.
+* `docs/ECU_SUPPORT.md` records actual image/hardware coverage. Mikas and Marelli remain
+  unverified candidates; matching silicon or loader bytes do not establish support.
+
 * README screenshots show released v1.0.1, predating the workspace layout. Retake on Windows;
   the in-progress reading/writing shots require an authorized real bench session.
 * The `SWRSTCON` experiment remains unperformed and requires a monitor register-write
@@ -285,3 +290,52 @@ Disable the form during an operation. Language/theme rebuilds preserve selected 
 path, port, mode and resume choice; the dangerous ECU override still resets. Form controls
 use the built-in clam renderer to follow the selected palette on all platforms; title bars
 and native menus remain platform-owned. Keep the device identity label tied to the engine's identity event rather than adapter enumeration.
+
+
+## Application identity
+
+The approved icon is Chip 74: a pale memory chip with geometric dark 74 digits and
+blue pins on a rounded graphite background. Keep it reproducible in
+`tools/make_icon.py`; regenerate the committed PNG, ICO and ICNS together after edits.
+The mark uses paths rather than platform fonts. Inspect small taskbar sizes as well
+as the large master when changing it.
+
+## Offline CAN research: paused milestone
+
+As of 2026-10-27, the user has paused further CAN/firmware reverse engineering at the
+offline milestone. Focus on maintaining the working K-line product. Do not resume an
+open-ended disassembly campaign from older follow-up notes. Resume when the user asks;
+ECU/CAN/serial operations still require their own explicit authorization.
+
+Start at [docs/RESEARCH.md](docs/RESEARCH.md) for the evidence index, reproduction commands,
+remaining questions and restart gates. Detailed findings remain in docs/CAN_LOADER.md;
+CAN_CLIENT.md defines only an offline contract, CAN_BENCH_PLAN.md an unperformed plan,
+and ECU_SUPPORT.md the actual sample/hardware coverage. None enables production CAN I/O.
+
+The stock I444GI04 studied offline has SHA256
+166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b; it is NOT the historical
+bench reference above. A matching boot fingerprint does not validate application code.
+Do not publish firmware, raw listings, local source paths, identifiers or private notes.
+
+Run tools/check_research_evidence.py before committing research changes: it checks archived
+script/ancestor fingerprints and corpus references without firmware/Ghidra. A pass does not
+rerun p-code or validate hardware. Never refresh a report hash to conceal changed code;
+rerun the corresponding wrapper on its reviewed image and retain the model boundaries.
+
+Durable limits to preserve in code and docs:
+
+* K-line ROM BSL and flash-resident CAN are distinct. Software CAN-loader entry, board
+  routing, clock selection, real CAN exchange and interrupted-write recovery remain unproven.
+* The proposed CRC client never reassigns tokens: at most 127 four-byte ranges (508 bytes)
+  per model lifetime. Reconnect/new instance/sleep does not establish reply freshness.
+  An injected RX-object race can mix one frame's token with another frame's address;
+  abstract FIFO ordering alone does not prove a consistent receive snapshot.
+* The admitted CAN interval excludes parts of a full image, including storage data in
+  the flash tail. CAN CRC reconstruction is not a complete pre-write recovery backup.
+* A normal helper return, cleared status or software TX callback is not physical flash
+  verification or bus delivery. Models explicitly replace peripheral effects/selected calls.
+* C1055E(2,55D4), despite its read mode, can issue serial writes to repair redundant copies
+  in the offline model. Do not use application initialization as a non-writing entry probe.
+  Application reset/preparation may save state and is not a harmless loader-entry command.
+* Mikas/Marelli have no inspected samples or bench confirmation here. Candidate names and
+  matching silicon are not support claims. Retain the current ECU identity/write gates.

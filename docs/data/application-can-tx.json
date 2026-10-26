@@ -1,0 +1,19 @@
+{
+  "cases": 9,
+  "tx_id": 2024,
+  "message_object": 92,
+  "lengths": [
+    1,
+    2,
+    7
+  ],
+  "busy_bits": [
+    2,
+    8
+  ],
+  "located_decoder_sla_sha256": "5315e7cdb409c02eeb8128bb707baf0dd7bed6d314e60dd9a9fafbccc73cf366",
+  "image_sha256": "166bbdd475930e5fc2f15035435505fc999e07d8a2d915595246f45fe0bff59b",
+  "script_sha256": "5c89f07989f4dafc03621aa713e3a6fdc51da81d7769acb186dd83e3a3ef7527",
+  "shim_sha256": "d20bcd342827499e93fe418f589ab3a8cc45c2ad582c2072084e0c05adef493a",
+  "scope": "Synthetic application buffer/context/driver p-code. CAN registers are RAM; no bus arbitration or ACK, timing, silicon execution, authorization or recovery proof."
+}
